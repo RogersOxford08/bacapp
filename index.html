@@ -206,6 +206,11 @@
 <script type="module">
 import { nip19, utils } from "https://esm.sh/nostr-tools@2.7.0";
 
+// ---------- Config ----------
+// How far back to fetch/display notes, in seconds.
+// Change this value to widen or narrow the feed window.
+const FEED_WINDOW_SECONDS = 3 * 24 * 60 * 60; // 3 days
+
 // ---------- State ----------
 const state = {
   relayUrl: localStorage.getItem("nostr_relay") || "",
@@ -255,6 +260,11 @@ function shortenNpub(npub) {
 function saveConfig() {
   localStorage.setItem("nostr_relay", state.relayUrl);
   localStorage.setItem("nostr_pubkeys", JSON.stringify(state.pubkeys));
+}
+
+function isWithinFeedWindow(event) {
+  const now = Math.floor(Date.now() / 1000);
+  return (now - event.created_at) <= FEED_WINDOW_SECONDS;
 }
 
 // ---------- Relay connection ----------
@@ -345,9 +355,12 @@ function subscribeAll() {
   closeSub(state.subIdNotes);
   closeSub(state.subIdProfiles);
 
+  const since = Math.floor(Date.now() / 1000) - FEED_WINDOW_SECONDS;
+
   sendReq(state.subIdNotes, {
     kinds: [1],
     authors: state.pubkeys,
+    since: since,
     limit: 100,
   });
 
@@ -360,6 +373,7 @@ function subscribeAll() {
 // ---------- Event handling ----------
 function handleNoteEvent(event) {
   if (state.events.has(event.id)) return;
+  if (!isWithinFeedWindow(event)) return; // client-side safety net
   state.events.set(event.id, event);
   renderFeed();
 }
@@ -386,17 +400,21 @@ function handleProfileEvent(event) {
 function renderEmptyState() {
   const hasRelay = !!state.relayUrl;
   const hasNpubs = state.pubkeys.length > 0;
-  feedEmpty.style.display = (hasRelay && hasNpubs) ? "none" : "block";
+  const hasEvents = state.events.size > 0;
+  feedEmpty.style.display = (hasRelay && hasNpubs && hasEvents) ? "none" : "block";
   if (!hasRelay) {
     feedEmpty.textContent = "Add and connect a relay to get started.";
   } else if (!hasNpubs) {
     feedEmpty.textContent = "Add at least one npub to see a feed.";
+  } else if (!hasEvents) {
+    feedEmpty.textContent = "No recent notes found for these npubs.";
   }
 }
 
 function renderFeed() {
   renderEmptyState();
   const sorted = Array.from(state.events.values())
+    .filter(isWithinFeedWindow)
     .sort((a, b) => b.created_at - a.created_at)
     .slice(0, 500); // cap in-memory events rendered
 
