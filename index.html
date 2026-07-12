@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NOSTR Custom Feed</title>
+<title>NOSTR Profile Viewer</title>
 <style>
   :root {
     --bg: #0f0f0f;
@@ -58,71 +58,119 @@
   .status.disconnected { background: rgba(224,82,82,0.15); color: var(--error); }
   .status.connecting { background: rgba(255,193,7,0.15); color: #ffc107; }
 
-  .layout {
-    display: flex;
-    max-width: 900px;
+  .npub-bar {
+    max-width: 700px;
     margin: 0 auto;
-  }
-  aside {
-    width: 240px;
-    flex-shrink: 0;
-    border-right: 1px solid var(--border);
-    padding: 12px;
-    min-height: 80vh;
-  }
-  aside h3 {
-    font-size: 13px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0 0 8px;
-  }
-  .npub-form {
+    padding: 12px 16px 0;
     display: flex;
-    gap: 6px;
-    margin-bottom: 12px;
-  }
-  .npub-form input {
-    flex: 1;
-    width: 100%;
-  }
-  .npub-item {
-    display: flex;
-    align-items: center;
     gap: 8px;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
   }
-  .npub-item img {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: #333;
-    object-fit: cover;
-  }
-  .npub-item .name {
+  .npub-bar input {
     flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    background: #111;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
   }
-  .npub-item button {
-    background: none;
+  .npub-bar button {
+    background: var(--accent);
     border: none;
-    color: var(--error);
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
     cursor: pointer;
+    font-size: 14px;
+  }
+  .npub-bar button:hover { opacity: 0.85; }
+
+  #npub-error {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 4px 16px 0;
+    color: var(--error);
     font-size: 12px;
+    min-height: 16px;
   }
 
-  main {
-    flex: 1;
-    padding: 12px;
+  .layout {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 12px 16px 40px;
   }
+
   .empty-state {
     color: var(--muted);
     text-align: center;
-    padding: 40px 20px;
+    padding: 60px 20px;
     font-size: 14px;
+  }
+
+  /* ---- Profile card ---- */
+  .profile-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .profile-banner {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    background: #222;
+    display: block;
+  }
+  .profile-banner.placeholder {
+    background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
+  }
+  .profile-body {
+    padding: 16px;
+    position: relative;
+  }
+  .profile-avatar {
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #333;
+    border: 3px solid var(--panel);
+    margin-top: -58px;
+    margin-bottom: 10px;
+    display: block;
+  }
+  .profile-name {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .profile-nip05 {
+    font-size: 13px;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .profile-npub {
+    font-size: 12px;
+    color: var(--muted);
+    word-break: break-all;
+    margin-bottom: 10px;
+  }
+  .profile-about {
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 4px;
+  }
+
+  /* ---- Notes list ---- */
+  .section-title {
+    font-size: 13px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+    padding-left: 2px;
   }
   .note {
     background: var(--panel);
@@ -136,17 +184,6 @@
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
-  }
-  .note-header img {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: #333;
-    object-fit: cover;
-  }
-  .note-header .author {
-    font-weight: 600;
-    font-size: 14px;
   }
   .note-header .time {
     color: var(--muted);
@@ -183,43 +220,43 @@
   <span id="relay-status" class="status disconnected">disconnected</span>
 </header>
 
-<div class="layout">
-  <aside>
-    <h3>Followed npubs</h3>
-    <div class="npub-form">
-      <input id="npub-input" type="text" placeholder="npub1..." />
-      <button id="npub-add-btn">Add</button>
-    </div>
-    <div id="npub-error" style="color:var(--error);font-size:12px;margin-bottom:8px;"></div>
-    <div id="npub-list"></div>
-  </aside>
+<div class="npub-bar">
+  <input id="npub-input" type="text" placeholder="npub1..." />
+  <button id="npub-load-btn">Load Profile</button>
+</div>
+<div id="npub-error"></div>
 
-  <main>
-    <div id="loading-indicator" style="display:none;">Loading events...</div>
-    <div id="feed"></div>
-    <div id="feed-empty" class="empty-state">
-      Add a relay and at least one npub to see a feed.
-    </div>
-  </main>
+<div class="layout">
+  <div id="loading-indicator" style="display:none;">Loading profile...</div>
+
+  <div id="profile-container"></div>
+
+  <div id="notes-container" style="display:none;">
+    <h3 class="section-title">Recent Notes</h3>
+    <div id="notes-list"></div>
+  </div>
+
+  <div id="empty-state" class="empty-state">
+    Add a relay and an npub to view a profile.
+  </div>
 </div>
 
 <script type="module">
 import { nip19, utils } from "https://esm.sh/nostr-tools@2.7.0";
 
 // ---------- Config ----------
-// How far back to fetch/display notes, in seconds.
-// Change this value to widen or narrow the feed window.
-const FEED_WINDOW_SECONDS = 3 * 24 * 60 * 60; // 3 days
+// How far back to fetch notes for this profile, in seconds.
+const NOTES_WINDOW_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 // ---------- State ----------
 const state = {
   relayUrl: localStorage.getItem("nostr_relay") || "",
-  pubkeys: JSON.parse(localStorage.getItem("nostr_pubkeys") || "[]"), // hex pubkeys
-  profiles: {}, // hex -> {name, picture}
-  events: new Map(), // id -> event
+  pubkey: localStorage.getItem("nostr_profile_pubkey") || "", // single hex pubkey
+  profile: null, // { name, picture, banner, about, nip05, _created_at }
+  notes: new Map(), // id -> event
   ws: null,
-  subIdNotes: "feed-notes-" + Math.random().toString(36).slice(2),
-  subIdProfiles: "feed-profiles-" + Math.random().toString(36).slice(2),
+  subIdProfile: "profile-" + Math.random().toString(36).slice(2),
+  subIdNotes: "profile-notes-" + Math.random().toString(36).slice(2),
   connected: false,
 };
 
@@ -228,12 +265,13 @@ const relayInput = document.getElementById("relay-input");
 const relayConnectBtn = document.getElementById("relay-connect-btn");
 const relayStatus = document.getElementById("relay-status");
 const npubInput = document.getElementById("npub-input");
-const npubAddBtn = document.getElementById("npub-add-btn");
+const npubLoadBtn = document.getElementById("npub-load-btn");
 const npubError = document.getElementById("npub-error");
-const npubList = document.getElementById("npub-list");
-const feedEl = document.getElementById("feed");
-const feedEmpty = document.getElementById("feed-empty");
 const loadingIndicator = document.getElementById("loading-indicator");
+const profileContainer = document.getElementById("profile-container");
+const notesContainer = document.getElementById("notes-container");
+const notesList = document.getElementById("notes-list");
+const emptyState = document.getElementById("empty-state");
 
 // ---------- Utility ----------
 function escapeHtml(str) {
@@ -259,12 +297,12 @@ function shortenNpub(npub) {
 
 function saveConfig() {
   localStorage.setItem("nostr_relay", state.relayUrl);
-  localStorage.setItem("nostr_pubkeys", JSON.stringify(state.pubkeys));
+  localStorage.setItem("nostr_profile_pubkey", state.pubkey);
 }
 
-function isWithinFeedWindow(event) {
+function isWithinNotesWindow(event) {
   const now = Math.floor(Date.now() / 1000);
-  return (now - event.created_at) <= FEED_WINDOW_SECONDS;
+  return (now - event.created_at) <= NOTES_WINDOW_SECONDS;
 }
 
 // ---------- Relay connection ----------
@@ -293,13 +331,12 @@ function connectRelay() {
   ws.onopen = () => {
     state.connected = true;
     setStatus("connected", "connected");
-    subscribeAll();
+    if (state.pubkey) subscribeProfile();
   };
 
   ws.onclose = () => {
     state.connected = false;
     setStatus("disconnected", "disconnected");
-    // simple retry after delay
     setTimeout(() => {
       if (state.relayUrl && state.ws === ws) connectRelay();
     }, 4000);
@@ -324,10 +361,10 @@ function handleRelayMessage(data) {
   const [type, subId, event] = data;
 
   if (type === "EVENT") {
-    if (subId === state.subIdNotes) {
-      handleNoteEvent(event);
-    } else if (subId === state.subIdProfiles) {
+    if (subId === state.subIdProfile) {
       handleProfileEvent(event);
+    } else if (subId === state.subIdNotes) {
+      handleNoteEvent(event);
     }
   } else if (type === "EOSE") {
     loadingIndicator.style.display = "none";
@@ -346,94 +383,140 @@ function closeSub(subId) {
   state.ws.send(JSON.stringify(["CLOSE", subId]));
 }
 
-function subscribeAll() {
-  if (state.pubkeys.length === 0) {
+function subscribeProfile() {
+  if (!state.pubkey) {
     renderEmptyState();
     return;
   }
-  loadingIndicator.style.display = "block";
-  closeSub(state.subIdNotes);
-  closeSub(state.subIdProfiles);
 
-  const since = Math.floor(Date.now() / 1000) - FEED_WINDOW_SECONDS;
+  // reset previous profile/notes when loading a new one
+  state.profile = null;
+  state.notes.clear();
+  renderProfile();
+  renderNotes();
+
+  loadingIndicator.style.display = "block";
+  closeSub(state.subIdProfile);
+  closeSub(state.subIdNotes);
+
+  const since = Math.floor(Date.now() / 1000) - NOTES_WINDOW_SECONDS;
+
+  sendReq(state.subIdProfile, {
+    kinds: [0],
+    authors: [state.pubkey],
+    limit: 1,
+  });
 
   sendReq(state.subIdNotes, {
     kinds: [1],
-    authors: state.pubkeys,
+    authors: [state.pubkey],
     since: since,
-    limit: 100,
-  });
-
-  sendReq(state.subIdProfiles, {
-    kinds: [0],
-    authors: state.pubkeys,
+    limit: 50,
   });
 }
 
 // ---------- Event handling ----------
-function handleNoteEvent(event) {
-  if (state.events.has(event.id)) return;
-  if (!isWithinFeedWindow(event)) return; // client-side safety net
-  state.events.set(event.id, event);
-  renderFeed();
-}
-
 function handleProfileEvent(event) {
   try {
     const meta = JSON.parse(event.content);
-    const existing = state.profiles[event.pubkey];
-    if (!existing || existing._created_at < event.created_at) {
-      state.profiles[event.pubkey] = {
+    if (!state.profile || state.profile._created_at < event.created_at) {
+      state.profile = {
         name: meta.name || meta.display_name || "",
         picture: meta.picture || "",
+        banner: meta.banner || "",
+        about: meta.about || "",
+        nip05: meta.nip05 || "",
         _created_at: event.created_at,
       };
-      renderNpubList();
-      renderFeed();
+      renderProfile();
     }
   } catch (e) {
     // ignore malformed metadata
   }
 }
 
+function handleNoteEvent(event) {
+  if (state.notes.has(event.id)) return;
+  if (!isWithinNotesWindow(event)) return;
+  state.notes.set(event.id, event);
+  renderNotes();
+}
+
 // ---------- Rendering ----------
 function renderEmptyState() {
   const hasRelay = !!state.relayUrl;
-  const hasNpubs = state.pubkeys.length > 0;
-  const hasEvents = state.events.size > 0;
-  feedEmpty.style.display = (hasRelay && hasNpubs && hasEvents) ? "none" : "block";
+  const hasPubkey = !!state.pubkey;
+  const show = !(hasRelay && hasPubkey);
+  emptyState.style.display = show ? "block" : "none";
+  profileContainer.style.display = show ? "none" : "block";
+  notesContainer.style.display = show ? "none" : "block";
+
   if (!hasRelay) {
-    feedEmpty.textContent = "Add and connect a relay to get started.";
-  } else if (!hasNpubs) {
-    feedEmpty.textContent = "Add at least one npub to see a feed.";
-  } else if (!hasEvents) {
-    feedEmpty.textContent = "No recent notes found for these npubs.";
+    emptyState.textContent = "Add and connect a relay to get started.";
+  } else if (!hasPubkey) {
+    emptyState.textContent = "Enter an npub to load a profile.";
   }
 }
 
-function renderFeed() {
+function renderProfile() {
   renderEmptyState();
-  const sorted = Array.from(state.events.values())
-    .filter(isWithinFeedWindow)
-    .sort((a, b) => b.created_at - a.created_at)
-    .slice(0, 500); // cap in-memory events rendered
+  if (!state.pubkey) {
+    profileContainer.innerHTML = "";
+    return;
+  }
 
-  feedEl.innerHTML = sorted.map(renderNote).join("");
+  const npub = nip19.npubEncode(state.pubkey);
+  const profile = state.profile || {};
+  const name = profile.name || shortenNpub(npub);
+  const avatar = profile.picture || "";
+  const banner = profile.banner || "";
+  const about = profile.about ? linkify(escapeHtml(profile.about)) : "";
+  const nip05 = profile.nip05 ? escapeHtml(profile.nip05) : "";
+
+  profileContainer.innerHTML = `
+    <div class="profile-card">
+      ${banner
+        ? `<img class="profile-banner" src="${banner}" loading="lazy" />`
+        : `<div class="profile-banner placeholder"></div>`}
+      <div class="profile-body">
+        ${avatar
+          ? `<img class="profile-avatar" src="${avatar}" loading="lazy" />`
+          : `<div class="profile-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;">no pic</div>`}
+        <div class="profile-name">${escapeHtml(name)}</div>
+        ${nip05 ? `<div class="profile-nip05">✓ ${nip05}</div>` : ""}
+        <div class="profile-npub" title="${npub}">${npub}</div>
+        ${about ? `<div class="profile-about">${about}</div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderNotes() {
+  if (!state.pubkey) {
+    notesList.innerHTML = "";
+    return;
+  }
+
+  const sorted = Array.from(state.notes.values())
+    .filter(isWithinNotesWindow)
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 200);
+
+  if (sorted.length === 0) {
+    notesList.innerHTML = `<div class="empty-state" style="padding:20px;">No recent notes found for this profile.</div>`;
+    return;
+  }
+
+  notesList.innerHTML = sorted.map(renderNote).join("");
 }
 
 function renderNote(event) {
-  const profile = state.profiles[event.pubkey] || {};
-  const npub = nip19.npubEncode(event.pubkey);
-  const name = profile.name || shortenNpub(npub);
-  const avatar = profile.picture || "";
   const date = new Date(event.created_at * 1000).toLocaleString();
   const content = linkify(escapeHtml(event.content));
 
   return `
     <div class="note">
       <div class="note-header">
-        ${avatar ? `<img src="${avatar}" loading="lazy" />` : `<img src="" style="visibility:hidden" />`}
-        <span class="author">${escapeHtml(name)}</span>
         <span class="time">${date}</span>
       </div>
       <div class="note-content">${content}</div>
@@ -441,28 +524,8 @@ function renderNote(event) {
   `;
 }
 
-function renderNpubList() {
-  npubList.innerHTML = state.pubkeys.map((hex) => {
-    const npub = nip19.npubEncode(hex);
-    const profile = state.profiles[hex] || {};
-    const name = profile.name || shortenNpub(npub);
-    const avatar = profile.picture || "";
-    return `
-      <div class="npub-item" data-hex="${hex}">
-        ${avatar ? `<img src="${avatar}" loading="lazy" />` : `<img src="" style="visibility:hidden" />`}
-        <span class="name" title="${npub}">${escapeHtml(name)}</span>
-        <button data-remove="${hex}">✕</button>
-      </div>
-    `;
-  }).join("");
-
-  npubList.querySelectorAll("button[data-remove]").forEach((btn) => {
-    btn.addEventListener("click", () => removeNpub(btn.dataset.remove));
-  });
-}
-
-// ---------- Npub management ----------
-function addNpub(npubStr) {
+// ---------- Npub loading ----------
+function loadNpub(npubStr) {
   npubError.textContent = "";
   npubStr = npubStr.trim();
 
@@ -476,32 +539,19 @@ function addNpub(npubStr) {
     return;
   }
 
-  if (state.pubkeys.includes(hex)) {
-    npubError.textContent = "Already added.";
-    return;
-  }
-
-  state.pubkeys.push(hex);
+  state.pubkey = hex;
   saveConfig();
-  renderNpubList();
   renderEmptyState();
-  npubInput.value = "";
 
-  if (state.connected) subscribeAll();
-}
-
-function removeNpub(hex) {
-  state.pubkeys = state.pubkeys.filter((k) => k !== hex);
-  saveConfig();
-  renderNpubList();
-
-  // remove their notes from the feed
-  for (const [id, ev] of state.events) {
-    if (ev.pubkey === hex) state.events.delete(id);
+  if (state.connected) {
+    subscribeProfile();
+  } else {
+    // show placeholder profile immediately using the npub itself
+    state.profile = null;
+    state.notes.clear();
+    renderProfile();
+    renderNotes();
   }
-  renderFeed();
-
-  if (state.connected) subscribeAll();
 }
 
 // ---------- Relay management ----------
@@ -522,16 +572,24 @@ relayInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") setRelay(relayInput.value);
 });
 
-npubAddBtn.addEventListener("click", () => addNpub(npubInput.value));
+npubLoadBtn.addEventListener("click", () => loadNpub(npubInput.value));
 npubInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") addNpub(npubInput.value);
+  if (e.key === "Enter") loadNpub(npubInput.value);
 });
 
 // ---------- Init ----------
 function init() {
   relayInput.value = state.relayUrl;
-  renderNpubList();
+  if (state.pubkey) {
+    try {
+      npubInput.value = nip19.npubEncode(state.pubkey);
+    } catch (e) {
+      // ignore
+    }
+  }
   renderEmptyState();
+  renderProfile();
+  renderNotes();
   if (state.relayUrl) connectRelay();
 }
 
