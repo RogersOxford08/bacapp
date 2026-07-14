@@ -14,6 +14,7 @@
     --accent: #7c3aed;
     --error: #e05252;
     --success: #4caf50;
+    --zap: #f7931a;
   }
   * { box-sizing: border-box; }
   body {
@@ -58,15 +59,18 @@
   .status.disconnected { background: rgba(224,82,82,0.15); color: var(--error); }
   .status.connecting { background: rgba(255,193,7,0.15); color: #ffc107; }
 
-  .npub-bar {
+  .npub-bar, .wallet-bar {
     max-width: 700px;
     margin: 0 auto;
     padding: 12px 16px 0;
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
+    align-items: center;
   }
-  .npub-bar input {
+  .npub-bar input, .wallet-bar input {
     flex: 1;
+    min-width: 180px;
     background: #111;
     border: 1px solid var(--border);
     color: var(--text);
@@ -74,7 +78,7 @@
     border-radius: 6px;
     font-size: 14px;
   }
-  .npub-bar button {
+  .npub-bar button, .wallet-bar button {
     background: var(--accent);
     border: none;
     color: white;
@@ -82,10 +86,14 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: 14px;
+    white-space: nowrap;
   }
-  .npub-bar button:hover { opacity: 0.85; }
+  .npub-bar button:hover, .wallet-bar button:hover { opacity: 0.85; }
+  .wallet-bar button#nwc-disconnect-btn {
+    background: var(--error);
+  }
 
-  #npub-error {
+  #npub-error, #nwc-error {
     max-width: 700px;
     margin: 0 auto;
     padding: 4px 16px 0;
@@ -161,7 +169,36 @@
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
-    margin-bottom: 4px;
+    margin-bottom: 14px;
+  }
+
+  /* ---- Zap section ---- */
+  .zap-section {
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+    margin-top: 4px;
+  }
+  #zap-btn {
+    background: var(--zap);
+    border: none;
+    color: #1a1a1a;
+    font-weight: 700;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #zap-btn:hover:not(:disabled) { opacity: 0.9; }
+  #zap-btn:disabled {
+    background: #444;
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  .zap-status {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted);
+    min-height: 16px;
   }
 
   /* ---- Notes list ---- */
@@ -226,6 +263,14 @@
 </div>
 <div id="npub-error"></div>
 
+<div class="wallet-bar">
+  <input id="nwc-input" type="text" placeholder="nostr+walletconnect://..." />
+  <button id="nwc-connect-btn">Connect Wallet</button>
+  <button id="nwc-disconnect-btn" style="display:none;">Disconnect</button>
+  <span id="nwc-status" class="status disconnected">wallet disconnected</span>
+</div>
+<div id="nwc-error"></div>
+
 <div class="layout">
   <div id="loading-indicator" style="display:none;">Loading profile...</div>
 
@@ -242,22 +287,31 @@
 </div>
 
 <script type="module">
-import { nip19, utils } from "https://esm.sh/nostr-tools@2.7.0";
+import { nip19, utils, nip04, finalizeEvent, getPublicKey, generateSecretKey } from "https://esm.sh/nostr-tools@2.7.0";
 
 // ---------- Config ----------
-// How far back to fetch notes for this profile, in seconds.
 const NOTES_WINDOW_SECONDS = 30 * 24 * 60 * 60; // 30 days
+const ZAP_AMOUNT_SATS = 100;
+const NWC_RESPONSE_TIMEOUT_MS = 20000;
 
 // ---------- State ----------
 const state = {
   relayUrl: localStorage.getItem("nostr_relay") || "",
-  pubkey: localStorage.getItem("nostr_profile_pubkey") || "", // single hex pubkey
-  profile: null, // { name, picture, banner, about, nip05, _created_at }
-  notes: new Map(), // id -> event
+  pubkey: localStorage.getItem("nostr_profile_pubkey") || "",
+  profile: null, // { name, picture, banner, about, nip05, lud16, lud06, _created_at }
+  notes: new Map(),
   ws: null,
   subIdProfile: "profile-" + Math.random().toString(36).slice(2),
   subIdNotes: "profile-notes-" + Math.random().toString(36).slice(2),
   connected: false,
+  nwc: {
+    connected: false,
+    walletPubkey: localStorage.getItem("nwc_wallet_pubkey") || "",
+    relay: localStorage.getItem("nwc_relay") || "",
+    secret: localStorage.getItem("nwc_secret") || "",
+    ws: null,
+    pendingZaps: new Map(), // requestEventId -> { resolve, reject }
+  },
 };
 
 // ---------- DOM refs ----------
@@ -267,6 +321,11 @@ const relayStatus = document.getElementById("relay-status");
 const npubInput = document.getElementById("npub-input");
 const npubLoadBtn = document.getElementById("npub-load-btn");
 const npubError = document.getElementById("npub-error");
+const nwcInput = document.getElementById("nwc-input");
+const nwcConnectBtn = document.getElementById("nwc-connect-btn");
+const nwcDisconnectBtn = document.getElementById("nwc-disconnect-btn");
+const nwcStatusEl = document.getElementById("nwc-status");
+const nwcError = document.getElementById("nwc-error");
 const loadingIndicator = document.getElementById("loading-indicator");
 const profileContainer = document.getElementById("profile-container");
 const notesContainer = document.getElementById("notes-container");
@@ -295,9 +354,29 @@ function shortenNpub(npub) {
   return npub.slice(0, 10) + "…" + npub.slice(-6);
 }
 
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return bytes;
+}
+
 function saveConfig() {
   localStorage.setItem("nostr_relay", state.relayUrl);
   localStorage.setItem("nostr_profile_pubkey", state.pubkey);
+}
+
+function saveNwcConfig() {
+  localStorage.setItem("nwc_wallet_pubkey", state.nwc.walletPubkey);
+  localStorage.setItem("nwc_relay", state.nwc.relay);
+  localStorage.setItem("nwc_secret", state.nwc.secret);
+}
+
+function clearNwcConfig() {
+  localStorage.removeItem("nwc_wallet_pubkey");
+  localStorage.removeItem("nwc_relay");
+  localStorage.removeItem("nwc_secret");
 }
 
 function isWithinNotesWindow(event) {
@@ -305,7 +384,7 @@ function isWithinNotesWindow(event) {
   return (now - event.created_at) <= NOTES_WINDOW_SECONDS;
 }
 
-// ---------- Relay connection ----------
+// ---------- Relay connection (profile/notes relay) ----------
 function setStatus(text, cls) {
   relayStatus.textContent = text;
   relayStatus.className = "status " + cls;
@@ -389,7 +468,6 @@ function subscribeProfile() {
     return;
   }
 
-  // reset previous profile/notes when loading a new one
   state.profile = null;
   state.notes.clear();
   renderProfile();
@@ -402,13 +480,13 @@ function subscribeProfile() {
   const since = Math.floor(Date.now() / 1000) - NOTES_WINDOW_SECONDS;
 
   sendReq(state.subIdProfile, {
-    kinds: [0],
+    kinds: ^0^,
     authors: [state.pubkey],
     limit: 1,
   });
 
   sendReq(state.subIdNotes, {
-    kinds: [1],
+    kinds: ^1^,
     authors: [state.pubkey],
     since: since,
     limit: 50,
@@ -426,6 +504,8 @@ function handleProfileEvent(event) {
         banner: meta.banner || "",
         about: meta.about || "",
         nip05: meta.nip05 || "",
+        lud16: meta.lud16 || "",
+        lud06: meta.lud06 || "",
         _created_at: event.created_at,
       };
       renderProfile();
@@ -442,7 +522,7 @@ function handleNoteEvent(event) {
   renderNotes();
 }
 
-// ---------- Rendering ----------
+// ---------- Rendering: profile / notes ----------
 function renderEmptyState() {
   const hasRelay = !!state.relayUrl;
   const hasPubkey = !!state.pubkey;
@@ -473,6 +553,23 @@ function renderProfile() {
   const about = profile.about ? linkify(escapeHtml(profile.about)) : "";
   const nip05 = profile.nip05 ? escapeHtml(profile.nip05) : "";
 
+  const hasLud16 = !!profile.lud16;
+  const hasLud06Only = !hasLud16 && !!profile.lud06;
+  const walletReady = state.nwc.connected;
+
+  let zapDisabled = true;
+  let zapHint = "";
+  if (!hasLud16 && !hasLud06Only) {
+    zapHint = "This profile has no lightning address set up.";
+  } else if (hasLud06Only) {
+    zapHint = "Only a legacy LNURL (lud06) is set; zaps require a lud16 lightning address.";
+  } else if (!walletReady) {
+    zapHint = "Connect a wallet above to enable zapping.";
+  } else {
+    zapDisabled = false;
+    zapHint = `Send ${ZAP_AMOUNT_SATS} sats to ${escapeHtml(profile.lud16)}`;
+  }
+
   profileContainer.innerHTML = `
     <div class="profile-card">
       ${banner
@@ -486,6 +583,12 @@ function renderProfile() {
         ${nip05 ? `<div class="profile-nip05">✓ ${nip05}</div>` : ""}
         <div class="profile-npub" title="${npub}">${npub}</div>
         ${about ? `<div class="profile-about">${about}</div>` : ""}
+        <div class="zap-section">
+          <button id="zap-btn" ${zapDisabled ? "disabled" : ""} title="${escapeHtml(zapHint)}">
+            ⚡ Zap ${ZAP_AMOUNT_SATS} sats
+          </button>
+          <div id="zap-status" class="zap-status">${escapeHtml(zapHint)}</div>
+        </div>
       </div>
     </div>
   `;
@@ -546,7 +649,6 @@ function loadNpub(npubStr) {
   if (state.connected) {
     subscribeProfile();
   } else {
-    // show placeholder profile immediately using the npub itself
     state.profile = null;
     state.notes.clear();
     renderProfile();
@@ -554,7 +656,7 @@ function loadNpub(npubStr) {
   }
 }
 
-// ---------- Relay management ----------
+// ---------- Relay management (profile/notes relay) ----------
 function setRelay(url) {
   url = url.trim();
   if (!/^wss?:\/\//.test(url)) {
@@ -564,6 +666,290 @@ function setRelay(url) {
   state.relayUrl = url;
   saveConfig();
   connectRelay();
+}
+
+// ==========================================================
+// ---------- Nostr Wallet Connect (NIP-47) ----------
+// ==========================================================
+
+function parseNwcUri(uriStr) {
+  const url = new URL(uriStr.trim());
+  const walletPubkey = url.hostname || url.pathname.replace(/^\/+/, "");
+  const relay = url.searchParams.get("relay");
+  const secret = url.searchParams.get("secret");
+  if (!walletPubkey || !relay || !secret) {
+    throw new Error("Missing required fields (pubkey, relay, or secret)");
+  }
+  return { walletPubkey, relay, secret };
+}
+
+function setNwcStatus(text, cls) {
+  nwcStatusEl.textContent = text;
+  nwcStatusEl.className = "status " + cls;
+  const isActive = (cls === "connected" || cls === "connecting");
+  nwcConnectBtn.style.display = isActive ? "none" : "inline-block";
+  nwcDisconnectBtn.style.display = (cls === "connected") ? "inline-block" : "none";
+}
+
+function connectNwc(uriStr) {
+  nwcError.textContent = "";
+  let parsed;
+  try {
+    parsed = parseNwcUri(uriStr);
+  } catch (e) {
+    nwcError.textContent = "Invalid wallet connection string: " + e.message;
+    return;
+  }
+
+  state.nwc.walletPubkey = parsed.walletPubkey;
+  state.nwc.relay = parsed.relay;
+  state.nwc.secret = parsed.secret;
+  saveNwcConfig();
+  openNwcRelay();
+}
+
+function disconnectNwc() {
+  if (state.nwc.ws) {
+    try { state.nwc.ws.close(); } catch (e) {}
+  }
+  state.nwc.connected = false;
+  state.nwc.walletPubkey = "";
+  state.nwc.relay = "";
+  state.nwc.secret = "";
+  state.nwc.ws = null;
+  state.nwc.pendingZaps.clear();
+  clearNwcConfig();
+  nwcInput.value = "";
+  setNwcStatus("wallet disconnected", "disconnected");
+  renderProfile();
+}
+
+function openNwcRelay() {
+  if (!state.nwc.relay) return;
+
+  if (state.nwc.ws) {
+    try { state.nwc.ws.close(); } catch (e) {}
+  }
+
+  setNwcStatus("connecting", "connecting");
+  let ws;
+  try {
+    ws = new WebSocket(state.nwc.relay);
+  } catch (e) {
+    setNwcStatus("invalid relay", "disconnected");
+    return;
+  }
+  state.nwc.ws = ws;
+
+  ws.onopen = () => {
+    state.nwc.connected = true;
+    setNwcStatus("wallet connected", "connected");
+    renderProfile();
+  };
+
+  ws.onclose = () => {
+    state.nwc.connected = false;
+    setNwcStatus("wallet disconnected", "disconnected");
+    renderProfile();
+  };
+
+  ws.onerror = () => {
+    setNwcStatus("wallet error", "disconnected");
+  };
+
+  ws.onmessage = (msg) => {
+    let data;
+    try {
+      data = JSON.parse(msg.data);
+    } catch (e) {
+      return;
+    }
+    handleNwcRelayMessage(data);
+  };
+}
+
+function handleNwcRelayMessage(data) {
+  const [type, subId, event] = data;
+  if (type === "EVENT" && event && event.kind === 23195) {
+    handleNwcResponse(event);
+  }
+}
+
+async function handleNwcResponse(event) {
+  const eTag = event.tags.find((t) => t^0^ === "e");
+  if (!eTag) return;
+  const requestId = eTag^1^;
+  const pending = state.nwc.pendingZaps.get(requestId);
+  if (!pending) return;
+
+  try {
+    const decrypted = await nip04.decrypt(state.nwc.secret, state.nwc.walletPubkey, event.content);
+    const parsed = JSON.parse(decrypted);
+    if (parsed.error) {
+      pending.reject(new Error(parsed.error.message || "Wallet returned an error"));
+    } else {
+      pending.resolve(parsed.result);
+    }
+  } catch (e) {
+    pending.reject(e);
+  } finally {
+    state.nwc.pendingZaps.delete(requestId);
+  }
+}
+
+function sendNwcPayment(bolt11) {
+  return new Promise((resolve, reject) => {
+    if (!state.nwc.connected || !state.nwc.ws || state.nwc.ws.readyState !== WebSocket.OPEN) {
+      reject(new Error("Wallet is not connected"));
+      return;
+    }
+
+    (async () => {
+      try {
+        const requestContent = JSON.stringify({
+          method: "pay_invoice",
+          params: { invoice: bolt11 },
+        });
+        const encrypted = await nip04.encrypt(state.nwc.secret, state.nwc.walletPubkey, requestContent);
+
+        const template = {
+          kind: 23194,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [["p", state.nwc.walletPubkey]],
+          content: encrypted,
+        };
+
+        const sk = hexToBytes(state.nwc.secret);
+        const signed = finalizeEvent(template, sk);
+
+        const timeoutId = setTimeout(() => {
+          state.nwc.pendingZaps.delete(signed.id);
+          reject(new Error("Wallet response timed out"));
+        }, NWC_RESPONSE_TIMEOUT_MS);
+
+        state.nwc.pendingZaps.set(signed.id, {
+          resolve: (result) => { clearTimeout(timeoutId); resolve(result); },
+          reject: (err) => { clearTimeout(timeoutId); reject(err); },
+        });
+
+        const subId = "nwc-resp-" + signed.id.slice(0, 12);
+        state.nwc.ws.send(JSON.stringify(["REQ", subId, {
+          kinds: ^23195^,
+          authors: [state.nwc.walletPubkey],
+          "#e": [signed.id],
+          since: Math.floor(Date.now() / 1000) - 60,
+        }]));
+
+        state.nwc.ws.send(JSON.stringify(["EVENT", signed]));
+      } catch (e) {
+        reject(e);
+      }
+    })();
+  });
+}
+
+// ==========================================================
+// ---------- Zap flow (NIP-57 + LNURL-pay + NWC) ----------
+// ==========================================================
+
+async function resolveLnurlPayInfo(lud16) {
+  const [name, domain] = lud16.split("@");
+  if (!name || !domain) throw new Error("Invalid lightning address format");
+
+  const resp = await fetch(`https://${domain}/.well-known/lnurlp/${name}`);
+  if (!resp.ok) throw new Error("Failed to resolve lightning address");
+
+  const data = await resp.json();
+  if (data.tag !== "payRequest" || !data.callback) {
+    throw new Error("Recipient's lightning address does not support payments");
+  }
+  return data;
+}
+
+function buildZapRequestEvent(recipientPubkeyHex, amountMsats, relayUrl) {
+  const relaysTag = ["relays"];
+  if (relayUrl) relaysTag.push(relayUrl);
+
+  const template = {
+    kind: 9734,
+    created_at: Math.floor(Date.now() / 1000),
+    content: "",
+    tags: [
+      relaysTag,
+      ["amount", String(amountMsats)],
+      ["p", recipientPubkeyHex],
+    ],
+  };
+
+  // Ephemeral, anonymous signing key -- not tied to any login/identity.
+  const sk = generateSecretKey();
+  return finalizeEvent(template, sk);
+}
+
+async function fetchZapInvoice(lnurlInfo, zapRequestEvent, amountMsats) {
+  const callbackUrl = new URL(lnurlInfo.callback);
+  callbackUrl.searchParams.set("amount", String(amountMsats));
+
+  if (lnurlInfo.allowsNostr) {
+    callbackUrl.searchParams.set("nostr", JSON.stringify(zapRequestEvent));
+  }
+
+  const resp = await fetch(callbackUrl.toString());
+  if (!resp.ok) throw new Error("Failed to fetch invoice from lightning address");
+
+  const data = await resp.json();
+  if (!data.pr) throw new Error("No invoice returned by lightning address");
+  return data.pr;
+}
+
+function setZapStatus(text, isError) {
+  const el = document.getElementById("zap-status");
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = isError ? "var(--error)" : "var(--muted)";
+}
+
+async function handleZapClick() {
+  if (!state.profile || !state.pubkey) return;
+
+  const lud16 = state.profile.lud16;
+  if (!lud16) {
+    setZapStatus("This profile has no lightning address set up for zaps.", true);
+    return;
+  }
+  if (!state.nwc.connected) {
+    setZapStatus("Connect a wallet first.", true);
+    return;
+  }
+
+  const zapBtn = document.getElementById("zap-btn");
+  if (zapBtn) zapBtn.disabled = true;
+
+  try {
+    setZapStatus("Requesting invoice...", false);
+    const amountMsats = ZAP_AMOUNT_SATS * 1000;
+    const lnurlInfo = await resolveLnurlPayInfo(lud16);
+
+    if (lnurlInfo.minSendable && amountMsats < lnurlInfo.minSendable) {
+      throw new Error("Amount is below the minimum this address accepts.");
+    }
+    if (lnurlInfo.maxSendable && amountMsats > lnurlInfo.maxSendable) {
+      throw new Error("Amount is above the maximum this address accepts.");
+    }
+
+    const zapRequest = buildZapRequestEvent(state.pubkey, amountMsats, state.relayUrl || "");
+    const bolt11 = await fetchZapInvoice(lnurlInfo, zapRequest, amountMsats);
+
+    setZapStatus("Sending payment via wallet...", false);
+    await sendNwcPayment(bolt11);
+
+    setZapStatus(`⚡ Zap sent! ${ZAP_AMOUNT_SATS} sats delivered.`, false);
+  } catch (e) {
+    console.error(e);
+    setZapStatus("Zap failed: " + e.message, true);
+  } finally {
+    if (zapBtn) zapBtn.disabled = false;
+  }
 }
 
 // ---------- Event listeners ----------
@@ -577,6 +963,19 @@ npubInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadNpub(npubInput.value);
 });
 
+nwcConnectBtn.addEventListener("click", () => connectNwc(nwcInput.value));
+nwcInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") connectNwc(nwcInput.value);
+});
+nwcDisconnectBtn.addEventListener("click", disconnectNwc);
+
+// Delegated click handler since profileContainer is re-rendered via innerHTML
+profileContainer.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "zap-btn") {
+    handleZapClick();
+  }
+});
+
 // ---------- Init ----------
 function init() {
   relayInput.value = state.relayUrl;
@@ -587,10 +986,18 @@ function init() {
       // ignore
     }
   }
+
   renderEmptyState();
   renderProfile();
   renderNotes();
+
   if (state.relayUrl) connectRelay();
+
+  if (state.nwc.walletPubkey && state.nwc.relay && state.nwc.secret) {
+    openNwcRelay();
+  } else {
+    setNwcStatus("wallet disconnected", "disconnected");
+  }
 }
 
 init();
