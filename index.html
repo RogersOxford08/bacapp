@@ -218,6 +218,118 @@
     font-size: 13px;
     padding: 10px;
   }
+
+  /* ---- Modal ---- */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px;
+    overflow-y: auto;
+  }
+  .modal-overlay.open {
+    display: flex;
+  }
+  .modal-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    width: 100%;
+    max-width: 560px;
+    max-height: calc(100vh - 80px);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .modal-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 2;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+  .modal-close-btn:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.06);
+  }
+  .modal-header {
+    padding: 16px 44px 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .modal-header img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #333;
+  }
+  .modal-header .modal-title {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .modal-body {
+    padding: 16px;
+    overflow-y: auto;
+  }
+  .modal-loading {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 20px;
+  }
+  .modal-empty {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 30px 10px;
+  }
+
+  .note {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .note-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .note-header .time {
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: auto;
+  }
+  .note-content {
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .note-content img {
+    max-width: 100%;
+    border-radius: 6px;
+    margin-top: 8px;
+  }
+  .note-content a {
+    color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -248,8 +360,27 @@
   </main>
 </div>
 
+<!-- ---------- Notes Modal ---------- -->
+<div id="modal-overlay" class="modal-overlay">
+  <div class="modal-box">
+    <button id="modal-close-btn" class="modal-close-btn" aria-label="Close">✕</button>
+    <div class="modal-header">
+      <img id="modal-avatar" src="" style="visibility:hidden;" />
+      <span id="modal-title" class="modal-title">Notes</span>
+    </div>
+    <div class="modal-body">
+      <div id="modal-loading" class="modal-loading" style="display:none;">Loading notes...</div>
+      <div id="modal-notes-list"></div>
+      <div id="modal-empty" class="modal-empty" style="display:none;">No recent notes found.</div>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { nip19, utils } from "https://esm.sh/nostr-tools@2.7.0";
+
+// ---------- Config ----------
+const MODAL_NOTES_WINDOW_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 // ---------- State ----------
 const state = {
@@ -259,6 +390,14 @@ const state = {
   ws: null,
   subIdProfiles: "profiles-" + Math.random().toString(36).slice(2),
   connected: false,
+
+  // modal-specific state
+  modal: {
+    open: false,
+    pubkey: null,
+    subId: null,
+    notes: new Map(), // id -> event
+  },
 };
 
 // ---------- DOM refs ----------
@@ -272,6 +411,14 @@ const npubList = document.getElementById("npub-list");
 const loadingIndicator = document.getElementById("loading-indicator");
 const profilesFeed = document.getElementById("profiles-feed");
 const emptyState = document.getElementById("empty-state");
+
+const modalOverlay = document.getElementById("modal-overlay");
+const modalCloseBtn = document.getElementById("modal-close-btn");
+const modalAvatar = document.getElementById("modal-avatar");
+const modalTitle = document.getElementById("modal-title");
+const modalLoading = document.getElementById("modal-loading");
+const modalNotesList = document.getElementById("modal-notes-list");
+const modalEmpty = document.getElementById("modal-empty");
 
 // ---------- Utility ----------
 function escapeHtml(str) {
@@ -298,6 +445,11 @@ function shortenNpub(npub) {
 function saveConfig() {
   localStorage.setItem("nostr_relay", state.relayUrl);
   localStorage.setItem("nostr_pubkeys", JSON.stringify(state.pubkeys));
+}
+
+function isWithinModalWindow(event) {
+  const now = Math.floor(Date.now() / 1000);
+  return (now - event.created_at) <= MODAL_NOTES_WINDOW_SECONDS;
 }
 
 // ---------- Relay connection ----------
@@ -327,6 +479,10 @@ function connectRelay() {
     state.connected = true;
     setStatus("connected", "connected");
     subscribeProfiles();
+    // if a modal is already open when relay reconnects, re-subscribe its notes
+    if (state.modal.open && state.modal.pubkey) {
+      subscribeModalNotes(state.modal.pubkey);
+    }
   };
 
   ws.onclose = () => {
@@ -358,9 +514,16 @@ function handleRelayMessage(data) {
   if (type === "EVENT") {
     if (subId === state.subIdProfiles) {
       handleProfileEvent(event);
+    } else if (subId === state.modal.subId) {
+      handleModalNoteEvent(event);
     }
   } else if (type === "EOSE") {
-    loadingIndicator.style.display = "none";
+    if (subId === state.subIdProfiles) {
+      loadingIndicator.style.display = "none";
+    } else if (subId === state.modal.subId) {
+      modalLoading.style.display = "none";
+      renderModalNotes();
+    }
   } else if (type === "NOTICE") {
     console.warn("Relay notice:", subId);
   }
@@ -372,6 +535,7 @@ function sendReq(subId, filter) {
 }
 
 function closeSub(subId) {
+  if (!subId) return;
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
   state.ws.send(JSON.stringify(["CLOSE", subId]));
 }
@@ -390,7 +554,7 @@ function subscribeProfiles() {
   });
 }
 
-// ---------- Event handling ----------
+// ---------- Profile event handling ----------
 function handleProfileEvent(event) {
   try {
     const meta = JSON.parse(event.content);
@@ -406,13 +570,17 @@ function handleProfileEvent(event) {
       };
       renderNpubList();
       renderProfilesFeed();
+      // keep modal header in sync if this is the currently open profile
+      if (state.modal.open && state.modal.pubkey === event.pubkey) {
+        renderModalHeader();
+      }
     }
   } catch (e) {
     // ignore malformed metadata
   }
 }
 
-// ---------- Rendering ----------
+// ---------- Profiles feed rendering ----------
 function renderEmptyState() {
   const hasRelay = !!state.relayUrl;
   const hasNpubs = state.pubkeys.length > 0;
@@ -447,7 +615,7 @@ function renderProfileCard(hex) {
   const nip05 = profile.nip05 ? escapeHtml(profile.nip05) : "";
 
   return `
-    <div class="profile-card" data-hex="${hex}" title="Click to view notes (coming soon)">
+    <div class="profile-card" data-hex="${hex}" title="Click to view notes">
       ${banner
         ? `<img class="profile-banner" src="${banner}" loading="lazy" />`
         : `<div class="profile-banner placeholder"></div>`}
@@ -521,6 +689,11 @@ function removeNpub(hex) {
   renderProfilesFeed();
 
   if (state.connected) subscribeProfiles();
+
+  // if the removed npub's modal is open, close it
+  if (state.modal.open && state.modal.pubkey === hex) {
+    closeModal();
+  }
 }
 
 // ---------- Relay management ----------
@@ -535,6 +708,123 @@ function setRelay(url) {
   connectRelay();
 }
 
+// ==========================================================
+// ---------- Notes Modal ----------
+// ==========================================================
+
+function openModal(hex) {
+  // close any previous modal subscription before starting a new one
+  closeModalSubscription();
+
+  state.modal.open = true;
+  state.modal.pubkey = hex;
+  state.modal.notes.clear();
+  state.modal.subId = "modal-notes-" + Math.random().toString(36).slice(2);
+
+  modalOverlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+
+  renderModalHeader();
+  modalNotesList.innerHTML = "";
+  modalEmpty.style.display = "none";
+  modalLoading.style.display = "block";
+
+  if (state.connected) {
+    subscribeModalNotes(hex);
+  } else {
+    modalLoading.style.display = "none";
+    modalEmpty.style.display = "block";
+    modalEmpty.textContent = "Not connected to a relay.";
+  }
+}
+
+function closeModal() {
+  closeModalSubscription();
+  state.modal.open = false;
+  state.modal.pubkey = null;
+  state.modal.notes.clear();
+  modalOverlay.classList.remove("open");
+  document.body.style.overflow = "";
+}
+
+function closeModalSubscription() {
+  if (state.modal.subId) {
+    closeSub(state.modal.subId);
+  }
+  state.modal.subId = null;
+}
+
+function subscribeModalNotes(hex) {
+  modalLoading.style.display = "block";
+  modalEmpty.style.display = "none";
+
+  const since = Math.floor(Date.now() / 1000) - MODAL_NOTES_WINDOW_SECONDS;
+
+  sendReq(state.modal.subId, {
+    kinds: [1],
+    authors: [hex],
+    since: since,
+    limit: 50,
+  });
+}
+
+function handleModalNoteEvent(event) {
+  if (state.modal.notes.has(event.id)) return;
+  if (!isWithinModalWindow(event)) return;
+  state.modal.notes.set(event.id, event);
+  renderModalNotes();
+}
+
+function renderModalHeader() {
+  const hex = state.modal.pubkey;
+  if (!hex) return;
+
+  const npub = nip19.npubEncode(hex);
+  const profile = state.profiles[hex] || {};
+  const name = profile.name || shortenNpub(npub);
+  const avatar = profile.picture || "";
+
+  modalTitle.textContent = name;
+  if (avatar) {
+    modalAvatar.src = avatar;
+    modalAvatar.style.visibility = "visible";
+  } else {
+    modalAvatar.removeAttribute("src");
+    modalAvatar.style.visibility = "hidden";
+  }
+}
+
+function renderModalNotes() {
+  const sorted = Array.from(state.modal.notes.values())
+    .filter(isWithinModalWindow)
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 200);
+
+  if (sorted.length === 0) {
+    modalNotesList.innerHTML = "";
+    modalEmpty.style.display = "block";
+    modalEmpty.textContent = "No recent notes found.";
+    return;
+  }
+
+  modalEmpty.style.display = "none";
+  modalNotesList.innerHTML = sorted.map(renderModalNote).join("");
+}
+
+function renderModalNote(event) {
+  const date = new Date(event.created_at * 1000).toLocaleString();
+  const content = linkify(escapeHtml(event.content));
+
+  return `
+    <div class="note">
+      <div class="note-header">
+        <span class="time">${date}</span>
+      </div>
+      <div class="note-content">${content}</div>
+    </div>
+  `;
+}
+
 // ---------- Event listeners ----------
 relayConnectBtn.addEventListener("click", () => setRelay(relayInput.value));
 relayInput.addEventListener("keydown", (e) => {
@@ -546,12 +836,25 @@ npubInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addNpub(npubInput.value);
 });
 
-// Placeholder click handler for profile cards -- wire up notes view here later
+// Click a profile card to open the notes modal
 profilesFeed.addEventListener("click", (e) => {
   const card = e.target.closest(".profile-card");
   if (!card) return;
   const hex = card.dataset.hex;
-  console.log("Profile clicked:", hex, "-- notes view not yet implemented");
+  openModal(hex);
+});
+
+// Close modal via the "x" button
+modalCloseBtn.addEventListener("click", closeModal);
+
+// Close modal by clicking the dark overlay outside the box
+modalOverlay.addEventListener("click", (e) => {
+  if (e.target === modalOverlay) closeModal();
+});
+
+// Close modal with the Escape key
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && state.modal.open) closeModal();
 });
 
 // ---------- Init ----------
