@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NOSTR Profile Feed</title>
+<title>NOSTR Profile Feeds</title>
 <style>
   :root {
     --bg: #0f0f0f;
@@ -57,6 +57,35 @@
   .status.connected { background: rgba(76,175,80,0.15); color: var(--success); }
   .status.disconnected { background: rgba(224,82,82,0.15); color: var(--error); }
   .status.connecting { background: rgba(255,193,7,0.15); color: #ffc107; }
+
+  /* ---- Nav bar ---- */
+  .nav-bar {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 10px 16px 0;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .nav-btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .nav-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .nav-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
 
   .app-layout {
     display: flex;
@@ -340,24 +369,11 @@
   <span id="relay-status" class="status disconnected">disconnected</span>
 </header>
 
-<div class="app-layout">
-  <aside>
-    <h3>Followed npubs</h3>
-    <div class="npub-form">
-      <input id="npub-input" type="text" placeholder="npub1..." />
-      <button id="npub-add-btn">Add</button>
-    </div>
-    <div id="npub-error"></div>
-    <div id="npub-list"></div>
-  </aside>
+<div class="nav-bar" id="nav-bar"></div>
 
-  <main>
-    <div id="loading-indicator" style="display:none;">Loading profiles...</div>
-    <div id="profiles-feed"></div>
-    <div id="empty-state" class="empty-state">
-      Add a relay and at least one npub to see profiles.
-    </div>
-  </main>
+<div class="app-layout">
+  <aside id="sidebar-container"></aside>
+  <main id="main-container"></main>
 </div>
 
 <!-- ---------- Notes Modal ---------- -->
@@ -379,38 +395,59 @@
 <script type="module">
 import { nip19, utils } from "https://esm.sh/nostr-tools@2.7.0";
 
-// ---------- Config ----------
+// ---------- Feed page config ----------
+// Add more entries here later to create additional feed pages.
+// Each feed maintains its own independent npub list and profile cards.
+const FEEDS = [
+  { id: "feed1", label: "Feed 1" },
+  { id: "feed2", label: "Feed 2" },
+];
+
 const MODAL_NOTES_WINDOW_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 // ---------- State ----------
 const state = {
   relayUrl: localStorage.getItem("nostr_relay") || "",
-  pubkeys: JSON.parse(localStorage.getItem("nostr_pubkeys") || "[]"), // hex pubkeys
-  profiles: {}, // hex -> { name, picture, banner, about, nip05, _created_at }
   ws: null,
-  subIdProfiles: "profiles-" + Math.random().toString(36).slice(2),
   connected: false,
 
-  // modal-specific state
+  activeFeedId: localStorage.getItem("nostr_active_feed_id") || FEEDS[0].id,
+
+  // feedId -> { pubkeys: [hex...], profiles: { hex -> {...} }, subId: string }
+  feedData: {},
+
   modal: {
     open: false,
+    feedId: null,
     pubkey: null,
     subId: null,
-    notes: new Map(), // id -> event
+    notes: new Map(),
   },
 };
 
-// ---------- DOM refs ----------
+if (!FEEDS.some((f) => f.id === state.activeFeedId)) {
+  state.activeFeedId = FEEDS[0].id;
+}
+
+function initFeedData(feedId) {
+  return {
+    pubkeys: JSON.parse(localStorage.getItem(`nostr_pubkeys_${feedId}`) || "[]"),
+    profiles: {},
+    subId: `profiles-${feedId}-` + Math.random().toString(36).slice(2),
+  };
+}
+
+FEEDS.forEach((f) => {
+  state.feedData[f.id] = initFeedData(f.id);
+});
+
+// ---------- DOM refs (static shell) ----------
 const relayInput = document.getElementById("relay-input");
 const relayConnectBtn = document.getElementById("relay-connect-btn");
 const relayStatus = document.getElementById("relay-status");
-const npubInput = document.getElementById("npub-input");
-const npubAddBtn = document.getElementById("npub-add-btn");
-const npubError = document.getElementById("npub-error");
-const npubList = document.getElementById("npub-list");
-const loadingIndicator = document.getElementById("loading-indicator");
-const profilesFeed = document.getElementById("profiles-feed");
-const emptyState = document.getElementById("empty-state");
+const navBar = document.getElementById("nav-bar");
+const sidebarContainer = document.getElementById("sidebar-container");
+const mainContainer = document.getElementById("main-container");
 
 const modalOverlay = document.getElementById("modal-overlay");
 const modalCloseBtn = document.getElementById("modal-close-btn");
@@ -442,14 +479,31 @@ function shortenNpub(npub) {
   return npub.slice(0, 10) + "…" + npub.slice(-6);
 }
 
-function saveConfig() {
+function saveRelayConfig() {
   localStorage.setItem("nostr_relay", state.relayUrl);
-  localStorage.setItem("nostr_pubkeys", JSON.stringify(state.pubkeys));
+}
+
+function saveFeedPubkeys(feedId) {
+  localStorage.setItem(
+    `nostr_pubkeys_${feedId}`,
+    JSON.stringify(state.feedData[feedId].pubkeys)
+  );
+}
+
+function saveActiveFeedId() {
+  localStorage.setItem("nostr_active_feed_id", state.activeFeedId);
 }
 
 function isWithinModalWindow(event) {
   const now = Math.floor(Date.now() / 1000);
   return (now - event.created_at) <= MODAL_NOTES_WINDOW_SECONDS;
+}
+
+function findFeedIdBySubId(subId) {
+  for (const feedId in state.feedData) {
+    if (state.feedData[feedId].subId === subId) return feedId;
+  }
+  return null;
 }
 
 // ---------- Relay connection ----------
@@ -478,8 +532,7 @@ function connectRelay() {
   ws.onopen = () => {
     state.connected = true;
     setStatus("connected", "connected");
-    subscribeProfiles();
-    // if a modal is already open when relay reconnects, re-subscribe its notes
+    subscribeFeedProfiles(state.activeFeedId);
     if (state.modal.open && state.modal.pubkey) {
       subscribeModalNotes(state.modal.pubkey);
     }
@@ -512,14 +565,17 @@ function handleRelayMessage(data) {
   const [type, subId, event] = data;
 
   if (type === "EVENT") {
-    if (subId === state.subIdProfiles) {
-      handleProfileEvent(event);
+    const feedId = findFeedIdBySubId(subId);
+    if (feedId) {
+      handleProfileEvent(feedId, event);
     } else if (subId === state.modal.subId) {
       handleModalNoteEvent(event);
     }
   } else if (type === "EOSE") {
-    if (subId === state.subIdProfiles) {
-      loadingIndicator.style.display = "none";
+    const feedId = findFeedIdBySubId(subId);
+    if (feedId === state.activeFeedId) {
+      const loadingIndicator = document.getElementById("loading-indicator");
+      if (loadingIndicator) loadingIndicator.style.display = "none";
     } else if (subId === state.modal.subId) {
       modalLoading.style.display = "none";
       renderModalNotes();
@@ -540,27 +596,31 @@ function closeSub(subId) {
   state.ws.send(JSON.stringify(["CLOSE", subId]));
 }
 
-function subscribeProfiles() {
-  if (state.pubkeys.length === 0) {
-    renderEmptyState();
+function subscribeFeedProfiles(feedId) {
+  const feed = state.feedData[feedId];
+  if (!feed || feed.pubkeys.length === 0) {
+    renderActiveFeed();
     return;
   }
-  loadingIndicator.style.display = "block";
-  closeSub(state.subIdProfiles);
 
-  sendReq(state.subIdProfiles, {
+  const loadingIndicator = document.getElementById("loading-indicator");
+  if (loadingIndicator) loadingIndicator.style.display = "block";
+
+  closeSub(feed.subId);
+  sendReq(feed.subId, {
     kinds: [0],
-    authors: state.pubkeys,
+    authors: feed.pubkeys,
   });
 }
 
 // ---------- Profile event handling ----------
-function handleProfileEvent(event) {
+function handleProfileEvent(feedId, event) {
   try {
     const meta = JSON.parse(event.content);
-    const existing = state.profiles[event.pubkey];
+    const feed = state.feedData[feedId];
+    const existing = feed.profiles[event.pubkey];
     if (!existing || existing._created_at < event.created_at) {
-      state.profiles[event.pubkey] = {
+      feed.profiles[event.pubkey] = {
         name: meta.name || meta.display_name || "",
         picture: meta.picture || "",
         banner: meta.banner || "",
@@ -568,10 +628,12 @@ function handleProfileEvent(event) {
         nip05: meta.nip05 || "",
         _created_at: event.created_at,
       };
-      renderNpubList();
-      renderProfilesFeed();
-      // keep modal header in sync if this is the currently open profile
-      if (state.modal.open && state.modal.pubkey === event.pubkey) {
+
+      if (feedId === state.activeFeedId) {
+        renderSidebar();
+        renderMainProfiles();
+      }
+      if (state.modal.open && state.modal.feedId === feedId && state.modal.pubkey === event.pubkey) {
         renderModalHeader();
       }
     }
@@ -580,34 +642,97 @@ function handleProfileEvent(event) {
   }
 }
 
-// ---------- Profiles feed rendering ----------
-function renderEmptyState() {
-  const hasRelay = !!state.relayUrl;
-  const hasNpubs = state.pubkeys.length > 0;
-  const show = !(hasRelay && hasNpubs);
-  emptyState.style.display = show ? "block" : "none";
-  profilesFeed.style.display = show ? "none" : "block";
-
-  if (!hasRelay) {
-    emptyState.textContent = "Add and connect a relay to get started.";
-  } else if (!hasNpubs) {
-    emptyState.textContent = "Add at least one npub to see profiles.";
-  }
+// ---------- Nav bar rendering ----------
+function renderNav() {
+  navBar.innerHTML = FEEDS.map((f) => `
+    <button class="nav-btn ${f.id === state.activeFeedId ? "active" : ""}" data-feed-id="${f.id}">
+      ${escapeHtml(f.label)}
+    </button>
+  `).join("");
 }
 
-function renderProfilesFeed() {
-  renderEmptyState();
-  if (state.pubkeys.length === 0) {
-    profilesFeed.innerHTML = "";
-    return;
-  }
+navBar.addEventListener("click", (e) => {
+  const btn = e.target.closest(".nav-btn");
+  if (!btn) return;
+  switchFeed(btn.dataset.feedId);
+});
 
-  profilesFeed.innerHTML = state.pubkeys.map(renderProfileCard).join("");
+function switchFeed(feedId) {
+  if (!state.feedData[feedId] || feedId === state.activeFeedId) return;
+  state.activeFeedId = feedId;
+  saveActiveFeedId();
+  renderNav();
+  renderActiveFeed();
+  if (state.connected) subscribeFeedProfiles(feedId);
 }
 
-function renderProfileCard(hex) {
+// ---------- Active feed rendering (sidebar + main) ----------
+function renderActiveFeed() {
+  renderSidebar();
+  renderMainProfiles();
+}
+
+function renderSidebar() {
+  const feedId = state.activeFeedId;
+  const feed = state.feedData[feedId];
+
+  sidebarContainer.innerHTML = `
+    <h3>Followed npubs</h3>
+    <div class="npub-form">
+      <input id="npub-input" type="text" placeholder="npub1..." />
+      <button id="npub-add-btn">Add</button>
+    </div>
+    <div id="npub-error"></div>
+    <div id="npub-list">
+      ${feed.pubkeys.map((hex) => renderNpubItem(feedId, hex)).join("")}
+    </div>
+  `;
+}
+
+function renderNpubItem(feedId, hex) {
+  const feed = state.feedData[feedId];
   const npub = nip19.npubEncode(hex);
-  const profile = state.profiles[hex] || {};
+  const profile = feed.profiles[hex] || {};
+  const name = profile.name || shortenNpub(npub);
+  const avatar = profile.picture || "";
+  return `
+    <div class="npub-item" data-hex="${hex}">
+      ${avatar ? `<img src="${avatar}" loading="lazy" />` : `<img src="" style="visibility:hidden" />`}
+      <span class="name" title="${npub}">${escapeHtml(name)}</span>
+      <button data-remove="${hex}">✕</button>
+    </div>
+  `;
+}
+
+function renderMainProfiles() {
+  const feedId = state.activeFeedId;
+  const feed = state.feedData[feedId];
+  const hasRelay = !!state.relayUrl;
+  const hasNpubs = feed.pubkeys.length > 0;
+  const showEmpty = !(hasRelay && hasNpubs);
+
+  let emptyText = "";
+  if (!hasRelay) {
+    emptyText = "Add and connect a relay to get started.";
+  } else if (!hasNpubs) {
+    emptyText = "Add at least one npub to see profiles.";
+  }
+
+  mainContainer.innerHTML = `
+    <div id="loading-indicator" style="display:none;">Loading profiles...</div>
+    <div id="profiles-feed" style="display:${showEmpty ? "none" : "block"};">
+      ${feed.pubkeys.map((hex) => renderProfileCard(feedId, hex)).join("")}
+    </div>
+    <div id="empty-state" class="empty-state" style="display:${showEmpty ? "block" : "none"};">
+      ${escapeHtml(emptyText)}
+    </div>
+  `;
+}
+
+function renderProfileCard(feedId, hex) {
+  const feed = state.feedData[feedId];
+  const npub = nip19.npubEncode(hex);
+  const profile = feed.profiles[hex] || {};
   const name = profile.name || shortenNpub(npub);
   const avatar = profile.picture || "";
   const banner = profile.banner || "";
@@ -632,28 +757,9 @@ function renderProfileCard(hex) {
   `;
 }
 
-function renderNpubList() {
-  npubList.innerHTML = state.pubkeys.map((hex) => {
-    const npub = nip19.npubEncode(hex);
-    const profile = state.profiles[hex] || {};
-    const name = profile.name || shortenNpub(npub);
-    const avatar = profile.picture || "";
-    return `
-      <div class="npub-item" data-hex="${hex}">
-        ${avatar ? `<img src="${avatar}" loading="lazy" />` : `<img src="" style="visibility:hidden" />`}
-        <span class="name" title="${npub}">${escapeHtml(name)}</span>
-        <button data-remove="${hex}">✕</button>
-      </div>
-    `;
-  }).join("");
-
-  npubList.querySelectorAll("button[data-remove]").forEach((btn) => {
-    btn.addEventListener("click", () => removeNpub(btn.dataset.remove));
-  });
-}
-
-// ---------- Npub management ----------
+// ---------- Npub management (operates on active feed) ----------
 function addNpub(npubStr) {
+  const npubError = document.getElementById("npub-error");
   npubError.textContent = "";
   npubStr = npubStr.trim();
 
@@ -667,31 +773,38 @@ function addNpub(npubStr) {
     return;
   }
 
-  if (state.pubkeys.includes(hex)) {
+  const feedId = state.activeFeedId;
+  const feed = state.feedData[feedId];
+
+  if (feed.pubkeys.includes(hex)) {
     npubError.textContent = "Already added.";
     return;
   }
 
-  state.pubkeys.push(hex);
-  saveConfig();
-  renderNpubList();
-  renderProfilesFeed();
-  npubInput.value = "";
+  feed.pubkeys.push(hex);
+  saveFeedPubkeys(feedId);
+  renderSidebar();
+  renderMainProfiles();
 
-  if (state.connected) subscribeProfiles();
+  const npubInput = document.getElementById("npub-input");
+  if (npubInput) npubInput.value = "";
+
+  if (state.connected) subscribeFeedProfiles(feedId);
 }
 
 function removeNpub(hex) {
-  state.pubkeys = state.pubkeys.filter((k) => k !== hex);
-  delete state.profiles[hex];
-  saveConfig();
-  renderNpubList();
-  renderProfilesFeed();
+  const feedId = state.activeFeedId;
+  const feed = state.feedData[feedId];
 
-  if (state.connected) subscribeProfiles();
+  feed.pubkeys = feed.pubkeys.filter((k) => k !== hex);
+  delete feed.profiles[hex];
+  saveFeedPubkeys(feedId);
+  renderSidebar();
+  renderMainProfiles();
 
-  // if the removed npub's modal is open, close it
-  if (state.modal.open && state.modal.pubkey === hex) {
+  if (state.connected) subscribeFeedProfiles(feedId);
+
+  if (state.modal.open && state.modal.feedId === feedId && state.modal.pubkey === hex) {
     closeModal();
   }
 }
@@ -704,19 +817,19 @@ function setRelay(url) {
     return;
   }
   state.relayUrl = url;
-  saveConfig();
+  saveRelayConfig();
   connectRelay();
 }
 
 // ==========================================================
-// ---------- Notes Modal ----------
+// ---------- Notes Modal (shared across all feed pages) ----------
 // ==========================================================
 
-function openModal(hex) {
-  // close any previous modal subscription before starting a new one
+function openModal(feedId, hex) {
   closeModalSubscription();
 
   state.modal.open = true;
+  state.modal.feedId = feedId;
   state.modal.pubkey = hex;
   state.modal.notes.clear();
   state.modal.subId = "modal-notes-" + Math.random().toString(36).slice(2);
@@ -741,6 +854,7 @@ function openModal(hex) {
 function closeModal() {
   closeModalSubscription();
   state.modal.open = false;
+  state.modal.feedId = null;
   state.modal.pubkey = null;
   state.modal.notes.clear();
   modalOverlay.classList.remove("open");
@@ -776,11 +890,13 @@ function handleModalNoteEvent(event) {
 }
 
 function renderModalHeader() {
+  const feedId = state.modal.feedId;
   const hex = state.modal.pubkey;
-  if (!hex) return;
+  if (!hex || !feedId) return;
 
+  const feed = state.feedData[feedId];
   const npub = nip19.npubEncode(hex);
-  const profile = state.profiles[hex] || {};
+  const profile = feed.profiles[hex] || {};
   const name = profile.name || shortenNpub(npub);
   const avatar = profile.picture || "";
 
@@ -825,34 +941,43 @@ function renderModalNote(event) {
   `;
 }
 
-// ---------- Event listeners ----------
+// ---------- Event listeners (delegated, survive innerHTML re-renders) ----------
 relayConnectBtn.addEventListener("click", () => setRelay(relayInput.value));
 relayInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") setRelay(relayInput.value);
 });
 
-npubAddBtn.addEventListener("click", () => addNpub(npubInput.value));
-npubInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") addNpub(npubInput.value);
+sidebarContainer.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "npub-add-btn") {
+    const npubInput = document.getElementById("npub-input");
+    addNpub(npubInput.value);
+    return;
+  }
+  const removeBtn = e.target.closest("button[data-remove]");
+  if (removeBtn) {
+    removeNpub(removeBtn.dataset.remove);
+  }
 });
 
-// Click a profile card to open the notes modal
-profilesFeed.addEventListener("click", (e) => {
+sidebarContainer.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target && e.target.id === "npub-input") {
+    addNpub(e.target.value);
+  }
+});
+
+mainContainer.addEventListener("click", (e) => {
   const card = e.target.closest(".profile-card");
   if (!card) return;
   const hex = card.dataset.hex;
-  openModal(hex);
+  openModal(state.activeFeedId, hex);
 });
 
-// Close modal via the "x" button
 modalCloseBtn.addEventListener("click", closeModal);
 
-// Close modal by clicking the dark overlay outside the box
 modalOverlay.addEventListener("click", (e) => {
   if (e.target === modalOverlay) closeModal();
 });
 
-// Close modal with the Escape key
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && state.modal.open) closeModal();
 });
@@ -860,9 +985,8 @@ document.addEventListener("keydown", (e) => {
 // ---------- Init ----------
 function init() {
   relayInput.value = state.relayUrl;
-  renderNpubList();
-  renderEmptyState();
-  renderProfilesFeed();
+  renderNav();
+  renderActiveFeed();
   if (state.relayUrl) connectRelay();
 }
 
