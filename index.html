@@ -60,7 +60,7 @@
 
   /* ---- Nav bar ---- */
   .nav-bar {
-    max-width: 900px;
+    max-width: 700px;
     margin: 0 auto;
     padding: 10px 16px 0;
     display: flex;
@@ -87,90 +87,75 @@
     border-color: var(--accent);
   }
 
-  .app-layout {
-    display: flex;
-    max-width: 900px;
+  main {
+    max-width: 700px;
     margin: 0 auto;
+    padding: 12px 16px 40px;
   }
-  aside {
-    width: 240px;
-    flex-shrink: 0;
-    border-right: 1px solid var(--border);
-    padding: 12px;
-    min-height: 80vh;
-  }
-  aside h3 {
-    font-size: 13px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0 0 8px;
-  }
-  .npub-form {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 12px;
-  }
-  .npub-form input {
-    flex: 1;
-    width: 100%;
-    background: #111;
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-size: 13px;
-  }
-  .npub-form button {
-    background: var(--accent);
-    border: none;
-    color: white;
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
-    white-space: nowrap;
-  }
-  .npub-form button:hover { opacity: 0.85; }
-  #npub-error {
-    color: var(--error);
-    font-size: 12px;
-    margin-bottom: 8px;
-    min-height: 14px;
-  }
-  .npub-item {
+
+  /* ---- Feed header ---- */
+  .feed-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
+    gap: 10px;
+    margin-bottom: 6px;
   }
-  .npub-item img {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: #333;
-    object-fit: cover;
-  }
-  .npub-item .name {
+  .feed-title {
+    font-size: 22px;
+    font-weight: 700;
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .npub-item button {
-    background: none;
-    border: none;
-    color: var(--error);
+  .gear-btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .gear-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
   }
 
-  main {
-    flex: 1;
-    max-width: 620px;
-    margin: 0 auto;
-    padding: 12px 16px 40px;
+  /* ---- Compact npub chip list ---- */
+  .npub-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+  .npub-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 4px 10px 4px 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .npub-chip img {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #333;
+    object-fit: cover;
+  }
+  .npub-chip-empty {
+    font-size: 13px;
+    color: var(--muted);
+    padding: 4px 0 0;
   }
 
   .empty-state {
@@ -248,7 +233,7 @@
     padding: 10px;
   }
 
-  /* ---- Modal ---- */
+  /* ---- Generic modal ---- */
   .modal-overlay {
     display: none;
     position: fixed;
@@ -359,6 +344,114 @@
   .note-content a {
     color: var(--accent);
   }
+
+  /* ---- Settings modal specific ---- */
+  .settings-section {
+    margin-bottom: 20px;
+  }
+  .settings-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .settings-title-row {
+    display: flex;
+    gap: 8px;
+  }
+  .settings-title-row input {
+    flex: 1;
+    background: #111;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  .settings-title-row button {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .settings-title-row button:hover { opacity: 0.85; }
+  .settings-save-msg {
+    font-size: 12px;
+    color: var(--success);
+    min-height: 16px;
+    margin-top: 4px;
+  }
+
+  .npub-form {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .npub-form input {
+    flex: 1;
+    width: 100%;
+    background: #111;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .npub-form button {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .npub-form button:hover { opacity: 0.85; }
+  #npub-error {
+    color: var(--error);
+    font-size: 12px;
+    margin-bottom: 8px;
+    min-height: 14px;
+  }
+  .npub-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .npub-item img {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #333;
+    object-fit: cover;
+  }
+  .npub-item .name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .npub-item button {
+    background: none;
+    border: 1px solid var(--error);
+    color: var(--error);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+  }
+  .npub-item button:hover {
+    background: rgba(224,82,82,0.1);
+  }
 </style>
 </head>
 <body>
@@ -371,10 +464,7 @@
 
 <div class="nav-bar" id="nav-bar"></div>
 
-<div class="app-layout">
-  <aside id="sidebar-container"></aside>
-  <main id="main-container"></main>
-</div>
+<main id="main-container"></main>
 
 <!-- ---------- Notes Modal ---------- -->
 <div id="modal-overlay" class="modal-overlay">
@@ -392,12 +482,25 @@
   </div>
 </div>
 
+<!-- ---------- Settings Modal (title + npub management) ---------- -->
+<div id="settings-overlay" class="modal-overlay">
+  <div class="modal-box">
+    <button id="settings-close-btn" class="modal-close-btn" aria-label="Close">✕</button>
+    <div class="modal-header">
+      <span class="modal-title">Feed Settings</span>
+    </div>
+    <div class="modal-body" id="settings-body">
+      <!-- filled dynamically -->
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { nip19, utils } from "https://esm.sh/nostr-tools@2.7.0";
 
 // ---------- Feed page config ----------
 // Add more entries here later to create additional feed pages.
-// Each feed maintains its own independent npub list and profile cards.
+// "label" is only the initial default title -- users can rename via settings.
 const FEEDS = [
   { id: "feed1", label: "Feed 1" },
   { id: "feed2", label: "Feed 2" },
@@ -413,7 +516,7 @@ const state = {
 
   activeFeedId: localStorage.getItem("nostr_active_feed_id") || FEEDS[0].id,
 
-  // feedId -> { pubkeys: [hex...], profiles: { hex -> {...} }, subId: string }
+  // feedId -> { title, pubkeys: [hex...], profiles: { hex -> {...} }, subId: string }
   feedData: {},
 
   modal: {
@@ -423,14 +526,20 @@ const state = {
     subId: null,
     notes: new Map(),
   },
+
+  settings: {
+    open: false,
+    feedId: null,
+  },
 };
 
 if (!FEEDS.some((f) => f.id === state.activeFeedId)) {
   state.activeFeedId = FEEDS[0].id;
 }
 
-function initFeedData(feedId) {
+function initFeedData(feedId, defaultLabel) {
   return {
+    title: localStorage.getItem(`nostr_title_${feedId}`) || defaultLabel,
     pubkeys: JSON.parse(localStorage.getItem(`nostr_pubkeys_${feedId}`) || "[]"),
     profiles: {},
     subId: `profiles-${feedId}-` + Math.random().toString(36).slice(2),
@@ -438,7 +547,7 @@ function initFeedData(feedId) {
 }
 
 FEEDS.forEach((f) => {
-  state.feedData[f.id] = initFeedData(f.id);
+  state.feedData[f.id] = initFeedData(f.id, f.label);
 });
 
 // ---------- DOM refs (static shell) ----------
@@ -446,7 +555,6 @@ const relayInput = document.getElementById("relay-input");
 const relayConnectBtn = document.getElementById("relay-connect-btn");
 const relayStatus = document.getElementById("relay-status");
 const navBar = document.getElementById("nav-bar");
-const sidebarContainer = document.getElementById("sidebar-container");
 const mainContainer = document.getElementById("main-container");
 
 const modalOverlay = document.getElementById("modal-overlay");
@@ -456,6 +564,10 @@ const modalTitle = document.getElementById("modal-title");
 const modalLoading = document.getElementById("modal-loading");
 const modalNotesList = document.getElementById("modal-notes-list");
 const modalEmpty = document.getElementById("modal-empty");
+
+const settingsOverlay = document.getElementById("settings-overlay");
+const settingsCloseBtn = document.getElementById("settings-close-btn");
+const settingsBody = document.getElementById("settings-body");
 
 // ---------- Utility ----------
 function escapeHtml(str) {
@@ -488,6 +600,10 @@ function saveFeedPubkeys(feedId) {
     `nostr_pubkeys_${feedId}`,
     JSON.stringify(state.feedData[feedId].pubkeys)
   );
+}
+
+function saveFeedTitle(feedId) {
+  localStorage.setItem(`nostr_title_${feedId}`, state.feedData[feedId].title);
 }
 
 function saveActiveFeedId() {
@@ -599,7 +715,7 @@ function closeSub(subId) {
 function subscribeFeedProfiles(feedId) {
   const feed = state.feedData[feedId];
   if (!feed || feed.pubkeys.length === 0) {
-    renderActiveFeed();
+    renderMainProfiles();
     return;
   }
 
@@ -630,8 +746,10 @@ function handleProfileEvent(feedId, event) {
       };
 
       if (feedId === state.activeFeedId) {
-        renderSidebar();
         renderMainProfiles();
+      }
+      if (state.settings.open && state.settings.feedId === feedId) {
+        renderSettingsBody();
       }
       if (state.modal.open && state.modal.feedId === feedId && state.modal.pubkey === event.pubkey) {
         renderModalHeader();
@@ -644,11 +762,14 @@ function handleProfileEvent(feedId, event) {
 
 // ---------- Nav bar rendering ----------
 function renderNav() {
-  navBar.innerHTML = FEEDS.map((f) => `
-    <button class="nav-btn ${f.id === state.activeFeedId ? "active" : ""}" data-feed-id="${f.id}">
-      ${escapeHtml(f.label)}
-    </button>
-  `).join("");
+  navBar.innerHTML = FEEDS.map((f) => {
+    const feed = state.feedData[f.id];
+    return `
+      <button class="nav-btn ${f.id === state.activeFeedId ? "active" : ""}" data-feed-id="${f.id}">
+        ${escapeHtml(feed.title)}
+      </button>
+    `;
+  }).join("");
 }
 
 navBar.addEventListener("click", (e) => {
@@ -662,48 +783,11 @@ function switchFeed(feedId) {
   state.activeFeedId = feedId;
   saveActiveFeedId();
   renderNav();
-  renderActiveFeed();
+  renderMainProfiles();
   if (state.connected) subscribeFeedProfiles(feedId);
 }
 
-// ---------- Active feed rendering (sidebar + main) ----------
-function renderActiveFeed() {
-  renderSidebar();
-  renderMainProfiles();
-}
-
-function renderSidebar() {
-  const feedId = state.activeFeedId;
-  const feed = state.feedData[feedId];
-
-  sidebarContainer.innerHTML = `
-    <h3>Followed npubs</h3>
-    <div class="npub-form">
-      <input id="npub-input" type="text" placeholder="npub1..." />
-      <button id="npub-add-btn">Add</button>
-    </div>
-    <div id="npub-error"></div>
-    <div id="npub-list">
-      ${feed.pubkeys.map((hex) => renderNpubItem(feedId, hex)).join("")}
-    </div>
-  `;
-}
-
-function renderNpubItem(feedId, hex) {
-  const feed = state.feedData[feedId];
-  const npub = nip19.npubEncode(hex);
-  const profile = feed.profiles[hex] || {};
-  const name = profile.name || shortenNpub(npub);
-  const avatar = profile.picture || "";
-  return `
-    <div class="npub-item" data-hex="${hex}">
-      ${avatar ? `<img src="${avatar}" loading="lazy" />` : `<img src="" style="visibility:hidden" />`}
-      <span class="name" title="${npub}">${escapeHtml(name)}</span>
-      <button data-remove="${hex}">✕</button>
-    </div>
-  `;
-}
-
+// ---------- Main page rendering ----------
 function renderMainProfiles() {
   const feedId = state.activeFeedId;
   const feed = state.feedData[feedId];
@@ -715,10 +799,17 @@ function renderMainProfiles() {
   if (!hasRelay) {
     emptyText = "Add and connect a relay to get started.";
   } else if (!hasNpubs) {
-    emptyText = "Add at least one npub to see profiles.";
+    emptyText = "Click the gear icon to add npubs to this feed.";
   }
 
   mainContainer.innerHTML = `
+    <div class="feed-header">
+      <div class="feed-title">${escapeHtml(feed.title)}</div>
+      <button id="gear-btn" class="gear-btn" title="Edit feed settings" aria-label="Edit feed settings">⚙️</button>
+    </div>
+
+    ${renderNpubChipRow(feedId)}
+
     <div id="loading-indicator" style="display:none;">Loading profiles...</div>
     <div id="profiles-feed" style="display:${showEmpty ? "none" : "block"};">
       ${feed.pubkeys.map((hex) => renderProfileCard(feedId, hex)).join("")}
@@ -727,6 +818,28 @@ function renderMainProfiles() {
       ${escapeHtml(emptyText)}
     </div>
   `;
+}
+
+function renderNpubChipRow(feedId) {
+  const feed = state.feedData[feedId];
+  if (feed.pubkeys.length === 0) {
+    return `<div class="npub-chip-empty">No npubs added yet.</div>`;
+  }
+
+  const chips = feed.pubkeys.map((hex) => {
+    const npub = nip19.npubEncode(hex);
+    const profile = feed.profiles[hex] || {};
+    const name = profile.name || shortenNpub(npub);
+    const avatar = profile.picture || "";
+    return `
+      <div class="npub-chip" title="${npub}">
+        ${avatar ? `<img src="${avatar}" loading="lazy" />` : `<img src="" style="visibility:hidden" />`}
+        <span>${escapeHtml(name)}</span>
+      </div>
+    `;
+  }).join("");
+
+  return `<div class="npub-chip-row">${chips}</div>`;
 }
 
 function renderProfileCard(feedId, hex) {
@@ -757,8 +870,104 @@ function renderProfileCard(feedId, hex) {
   `;
 }
 
-// ---------- Npub management (operates on active feed) ----------
+// ==========================================================
+// ---------- Settings Modal (title + npub management) ----------
+// ==========================================================
+
+function openSettings(feedId) {
+  state.settings.open = true;
+  state.settings.feedId = feedId;
+  settingsOverlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+  renderSettingsBody();
+}
+
+function closeSettings() {
+  state.settings.open = false;
+  state.settings.feedId = null;
+  settingsOverlay.classList.remove("open");
+  if (!modalOverlay.classList.contains("open")) {
+    document.body.style.overflow = "";
+  }
+}
+
+function renderSettingsBody() {
+  const feedId = state.settings.feedId;
+  if (!feedId) return;
+  const feed = state.feedData[feedId];
+
+  settingsBody.innerHTML = `
+    <div class="settings-section">
+      <div class="settings-label">Feed Title</div>
+      <div class="settings-title-row">
+        <input id="settings-title-input" type="text" value="${escapeHtml(feed.title)}" placeholder="Feed title..." />
+        <button id="settings-title-save-btn">Save</button>
+      </div>
+      <div id="settings-title-msg" class="settings-save-msg"></div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Add npub</div>
+      <div class="npub-form">
+        <input id="npub-input" type="text" placeholder="npub1..." />
+        <button id="npub-add-btn">Add</button>
+      </div>
+      <div id="npub-error"></div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Followed npubs</div>
+      <div id="npub-list">
+        ${feed.pubkeys.length > 0
+          ? feed.pubkeys.map((hex) => renderNpubListItem(feedId, hex)).join("")
+          : `<div class="npub-chip-empty">No npubs added yet.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderNpubListItem(feedId, hex) {
+  const feed = state.feedData[feedId];
+  const npub = nip19.npubEncode(hex);
+  const profile = feed.profiles[hex] || {};
+  const name = profile.name || shortenNpub(npub);
+  const avatar = profile.picture || "";
+  return `
+    <div class="npub-item" data-hex="${hex}">
+      ${avatar ? `<img src="${avatar}" loading="lazy" />` : `<img src="" style="visibility:hidden" />`}
+      <span class="name" title="${npub}">${escapeHtml(name)}</span>
+      <button data-remove="${hex}">Remove</button>
+    </div>
+  `;
+}
+
+function saveTitleFromInput() {
+  const feedId = state.settings.feedId;
+  if (!feedId) return;
+  const input = document.getElementById("settings-title-input");
+  const msg = document.getElementById("settings-title-msg");
+  const newTitle = input.value.trim();
+
+  if (!newTitle) {
+    msg.style.color = "var(--error)";
+    msg.textContent = "Title cannot be empty.";
+    return;
+  }
+
+  state.feedData[feedId].title = newTitle;
+  saveFeedTitle(feedId);
+  renderNav();
+  renderMainProfiles();
+
+  msg.style.color = "var(--success)";
+  msg.textContent = "Saved.";
+  setTimeout(() => { if (msg) msg.textContent = ""; }, 2000);
+}
+
 function addNpub(npubStr) {
+  const feedId = state.settings.feedId;
+  if (!feedId) return;
+
   const npubError = document.getElementById("npub-error");
   npubError.textContent = "";
   npubStr = npubStr.trim();
@@ -773,9 +982,7 @@ function addNpub(npubStr) {
     return;
   }
 
-  const feedId = state.activeFeedId;
   const feed = state.feedData[feedId];
-
   if (feed.pubkeys.includes(hex)) {
     npubError.textContent = "Already added.";
     return;
@@ -783,24 +990,22 @@ function addNpub(npubStr) {
 
   feed.pubkeys.push(hex);
   saveFeedPubkeys(feedId);
-  renderSidebar();
-  renderMainProfiles();
-
-  const npubInput = document.getElementById("npub-input");
-  if (npubInput) npubInput.value = "";
+  renderSettingsBody();
+  if (feedId === state.activeFeedId) renderMainProfiles();
 
   if (state.connected) subscribeFeedProfiles(feedId);
 }
 
 function removeNpub(hex) {
-  const feedId = state.activeFeedId;
-  const feed = state.feedData[feedId];
+  const feedId = state.settings.feedId;
+  if (!feedId) return;
 
+  const feed = state.feedData[feedId];
   feed.pubkeys = feed.pubkeys.filter((k) => k !== hex);
   delete feed.profiles[hex];
   saveFeedPubkeys(feedId);
-  renderSidebar();
-  renderMainProfiles();
+  renderSettingsBody();
+  if (feedId === state.activeFeedId) renderMainProfiles();
 
   if (state.connected) subscribeFeedProfiles(feedId);
 
@@ -858,7 +1063,9 @@ function closeModal() {
   state.modal.pubkey = null;
   state.modal.notes.clear();
   modalOverlay.classList.remove("open");
-  document.body.style.overflow = "";
+  if (!settingsOverlay.classList.contains("open")) {
+    document.body.style.overflow = "";
+  }
 }
 
 function closeModalSubscription() {
@@ -947,7 +1154,24 @@ relayInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") setRelay(relayInput.value);
 });
 
-sidebarContainer.addEventListener("click", (e) => {
+// Gear icon + profile card clicks (main page)
+mainContainer.addEventListener("click", (e) => {
+  if (e.target.closest("#gear-btn")) {
+    openSettings(state.activeFeedId);
+    return;
+  }
+  const card = e.target.closest(".profile-card");
+  if (card) {
+    openModal(state.activeFeedId, card.dataset.hex);
+  }
+});
+
+// Settings modal interactions
+settingsBody.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "settings-title-save-btn") {
+    saveTitleFromInput();
+    return;
+  }
   if (e.target && e.target.id === "npub-add-btn") {
     const npubInput = document.getElementById("npub-input");
     addNpub(npubInput.value);
@@ -959,34 +1183,41 @@ sidebarContainer.addEventListener("click", (e) => {
   }
 });
 
-sidebarContainer.addEventListener("keydown", (e) => {
+settingsBody.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target && e.target.id === "settings-title-input") {
+    saveTitleFromInput();
+  }
   if (e.key === "Enter" && e.target && e.target.id === "npub-input") {
     addNpub(e.target.value);
   }
 });
 
-mainContainer.addEventListener("click", (e) => {
-  const card = e.target.closest(".profile-card");
-  if (!card) return;
-  const hex = card.dataset.hex;
-  openModal(state.activeFeedId, hex);
+settingsCloseBtn.addEventListener("click", closeSettings);
+settingsOverlay.addEventListener("click", (e) => {
+  if (e.target === settingsOverlay) closeSettings();
 });
 
+// Notes modal close handlers
 modalCloseBtn.addEventListener("click", closeModal);
-
 modalOverlay.addEventListener("click", (e) => {
   if (e.target === modalOverlay) closeModal();
 });
 
+// Escape key closes whichever modal is open (settings takes priority if both somehow open)
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && state.modal.open) closeModal();
+  if (e.key !== "Escape") return;
+  if (state.settings.open) {
+    closeSettings();
+  } else if (state.modal.open) {
+    closeModal();
+  }
 });
 
 // ---------- Init ----------
 function init() {
   relayInput.value = state.relayUrl;
   renderNav();
-  renderActiveFeed();
+  renderMainProfiles();
   if (state.relayUrl) connectRelay();
 }
 
