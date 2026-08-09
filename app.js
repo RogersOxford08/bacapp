@@ -111,6 +111,14 @@ $('mineBtn').onclick = () => {
 
   const difficulty = parseInt($('difficultySlider').value, 10);
 
+  if (relayMinDifficulty !== null && difficulty < relayMinDifficulty) {
+    const proceed = confirm(
+      `This relay requires at least ${relayMinDifficulty} bits of PoW, but your slider is set to ${difficulty}. The relay will likely reject this event. Mine anyway?`
+    );
+    if (!proceed) return;
+    log(`Warning: mining below relay minimum (${difficulty} < ${relayMinDifficulty}).`);
+  }
+
   const template = {
     kind: 1,
     created_at: Math.floor(Date.now() / 1000),
