@@ -30,8 +30,6 @@ $('loginBtn').onclick = () => {
 };
 
 // ---------- 2. RELAY ----------
-let relayMinDifficulty = null; // tracked so we can warn on mine/publish
-
 $('connectBtn').onclick = async () => {
   const url = $('relayInput').value.trim();
   try {
@@ -44,57 +42,11 @@ $('connectBtn').onclick = async () => {
       $('relayStatus').textContent = 'Disconnected.';
       log('Relay connection closed.');
     };
-
-    await fetchNip11Info(url);
   } catch (err) {
     $('relayStatus').textContent = `Failed to connect: ${err.message}`;
     log(`Relay connect error: ${err.message}`);
   }
 };
-
-async function fetchNip11Info(wsUrl) {
-  relayMinDifficulty = null;
-  $('nip11Status').textContent = 'NIP-11 info: fetching...';
-
-  // NIP-11 requires an http(s) fetch with Accept: application/nostr+json,
-  // against the same host but http(s) scheme instead of ws(s).
-  const httpUrl = wsUrl.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
-
-  try {
-    const res = await fetch(httpUrl, {
-      headers: { Accept: 'application/nostr+json' },
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const info = await res.json();
-    const name = info.name || '(unnamed relay)';
-    const minPow = info.limitation?.min_pow_difficulty ?? null;
-
-    if (minPow !== null && minPow > 0) {
-      relayMinDifficulty = minPow;
-      $('nip11Status').textContent =
-        `NIP-11 info: "${name}" requires min PoW difficulty = ${minPow} bits`;
-      log(`Relay NIP-11: min_pow_difficulty=${minPow}`);
-
-      // Nudge the slider up to at least the relay's minimum, so a first
-      // mine attempt doesn't get rejected outright.
-      const slider = $('difficultySlider');
-      if (parseInt(slider.value, 10) < minPow) {
-        slider.value = Math.min(minPow, parseInt(slider.max, 10));
-        $('difficultyLabel').textContent = `${slider.value} bits`;
-        log(`Difficulty slider auto-raised to ${slider.value} bits to meet relay minimum.`);
-      }
-    } else {
-      $('nip11Status').textContent =
-        `NIP-11 info: "${name}" — no minimum PoW required.`;
-      log('Relay NIP-11: no min_pow_difficulty specified.');
-    }
-  } catch (err) {
-    $('nip11Status').textContent = `NIP-11 info: unavailable (${err.message})`;
-    log(`NIP-11 fetch failed: ${err.message}`);
-  }
-}
 
 // ---------- 3. DIFFICULTY SLIDER ----------
 $('difficultySlider').oninput = (e) => {
@@ -110,14 +62,6 @@ $('mineBtn').onclick = () => {
   if (!content) return log('Error: write something first.');
 
   const difficulty = parseInt($('difficultySlider').value, 10);
-
-  if (relayMinDifficulty !== null && difficulty < relayMinDifficulty) {
-    const proceed = confirm(
-      `This relay requires at least ${relayMinDifficulty} bits of PoW, but your slider is set to ${difficulty}. The relay will likely reject this event. Mine anyway?`
-    );
-    if (!proceed) return;
-    log(`Warning: mining below relay minimum (${difficulty} < ${relayMinDifficulty}).`);
-  }
 
   const template = {
     kind: 1,
