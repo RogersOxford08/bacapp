@@ -1,70 +1,118 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Nostr PoW Tester</title>
-<style>
-  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; background: #111; color: #eee; }
-  section { border: 1px solid #333; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
-  h2 { margin-top: 0; font-size: 16px; color: #9cf; }
-  input, textarea, select, button { font-family: inherit; font-size: 14px; }
-  input[type="text"], input[type="password"], textarea, select {
-    width: 100%; box-sizing: border-box; padding: 8px; margin: 4px 0 10px;
-    background: #1c1c1c; color: #eee; border: 1px solid #444; border-radius: 4px;
-  }
-  button { padding: 8px 14px; border-radius: 4px; border: none; cursor: pointer; background: #3a6; color: #fff; }
-  button:disabled { background: #555; cursor: not-allowed; }
-  button.secondary { background: #555; }
-  .status { font-size: 13px; color: #aaa; margin-top: 6px; }
-  .progress-outer { background: #222; border-radius: 4px; height: 18px; overflow: hidden; margin: 8px 0; }
-  .progress-inner { background: #3a6; height: 100%; width: 0%; transition: width 0.1s linear; }
-  .row { display: flex; align-items: center; gap: 10px; }
-  .row > * { flex: 1; }
-  .pill { display: inline-block; background: #234; color: #9cf; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
-  #log { font-family: monospace; font-size: 12px; background: #000; padding: 8px; border-radius: 4px; max-height: 160px; overflow-y: auto; white-space: pre-wrap; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nostr PoW Testbed</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 720px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.5;
+    }
+    section {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 1.1rem;
+    }
+    .row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+    }
+    input[type="text"], textarea {
+      flex: 1;
+      padding: 0.4rem;
+      font-family: inherit;
+    }
+    textarea {
+      width: 100%;
+      min-height: 4rem;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+    }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+    .status {
+      font-size: 0.9rem;
+      color: #333;
+      word-break: break-all;
+    }
+    #log {
+      background: #111;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 0.8rem;
+      padding: 0.75rem;
+      height: 220px;
+      overflow-y: auto;
+      border-radius: 6px;
+      white-space: pre-wrap;
+    }
+    #difficultyLabel {
+      min-width: 4rem;
+      text-align: right;
+    }
+  </style>
 </head>
 <body>
+  <h1>Nostr Proof-of-Work Testbed</h1>
 
-<h1>⚒️ Nostr PoW Tester</h1>
+  <section id="login-section">
+    <h2>1. Identity</h2>
+    <div class="row">
+      <button id="loginBtn">Generate new keypair</button>
+    </div>
+    <div class="status" id="loginStatus">Not logged in.</div>
+  </section>
 
-<section id="login-section">
-  <h2>1. Login (existing nsec)</h2>
-  <input type="password" id="nsecInput" placeholder="nsec1..." />
-  <button id="loginBtn">Login</button>
-  <div class="status" id="loginStatus">Not logged in.</div>
-</section>
+  <section id="relay-section">
+    <h2>2. Relay</h2>
+    <div class="row">
+      <input type="text" id="relayInput" value="wss://relay.damus.io" />
+      <button id="connectBtn">Connect</button>
+    </div>
+    <div class="status" id="relayStatus">Not connected.</div>
+    <div class="status" id="nip11Status">NIP-11 info: —</div>
+  </section>
 
-<section id="relay-section">
-  <h2>2. Relay</h2>
-  <div class="row">
-    <input type="text" id="relayInput" value="wss://relay.damus.io" />
-    <button id="connectBtn">Connect</button>
-  </div>
-  <div class="status" id="relayStatus">Not connected.</div>
-</section>
+  <section id="compose-section">
+    <h2>3. Compose &amp; Mine</h2>
+    <div class="row">
+      <textarea id="content" placeholder="Write your note here..."></textarea>
+    </div>
+    <div class="row">
+      <label for="difficultySlider">Difficulty:</label>
+      <input type="range" id="difficultySlider" min="0" max="32" value="8" />
+      <span id="difficultyLabel">8 bits</span>
+    </div>
+    <div class="row">
+      <button id="mineBtn">Mine</button>
+      <button id="stopMineBtn" disabled>Stop</button>
+      <button id="publishBtn" disabled>Publish</button>
+    </div>
+    <div class="status" id="mineStatus">Idle.</div>
+  </section>
 
-<section id="post-section">
-  <h2>3. Compose + Mine PoW</h2>
-  <textarea id="content" rows="3" placeholder="What's on your mind? (mined before posting)"></textarea>
+  <section id="log-section">
+    <h2>4. Log</h2>
+    <div id="log"></div>
+  </section>
 
-  <label>Difficulty target: <span class="pill" id="difficultyLabel">20 bits</span></label>
-  <input type="range" id="difficultySlider" min="0" max="28" value="20" />
-
-  <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
-  <div class="status" id="mineStatus">Idle.</div>
-
-  <div class="row">
-    <button id="mineBtn">Mine + Publish</button>
-    <button id="cancelBtn" class="secondary" disabled>Cancel</button>
-  </div>
-</section>
-
-<section>
-  <h2>Log</h2>
-  <div id="log"></div>
-</section>
-
-<script type="module" src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
