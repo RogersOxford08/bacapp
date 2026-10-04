@@ -1,1 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nostr LinkTree</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#161922; --border:#262b38;
+    --text:#e8e8ec; --muted:#8a8f9c; --accent:#8b5cf6;
+    --green:#3ddc84; --red:#ff5c6c; --amber:#f5b942;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--bg); color:var(--text); padding:24px;
+  }
+  .container{max-width:720px; margin:0 auto;}
+  h1{font-size:22px; margin-bottom:4px;}
+  h2{font-size:15px; color:var(--accent); margin:0 0 12px; text-transform:uppercase; letter-spacing:.05em;}
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:18px; margin-bottom:18px;
+  }
+  input, textarea{
+    width:100%; padding:9px 10px; margin:6px 0; background:#0d0f14;
+    border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px;
+  }
+  textarea{resize:vertical; min-height:60px; font-family:monospace; font-size:12px;}
+  .btn{
+    display:inline-block; padding:8px 14px; background:var(--accent); color:#fff;
+    border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; border:none;
+    user-select:none;
+  }
+  .btn:hover{opacity:.88}
+  .btn.secondary{background:#2a2e3a;}
+  .btn.danger{background:#4a2130;}
+  .row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:6px 0;}
+  .muted{color:var(--muted); font-size:12px;}
+  .avatar{width:44px; height:44px; border-radius:50%; object-fit:cover; background:#333; flex-shrink:0;}
+  .link-item{
+    display:flex; justify-content:space-between; align-items:center;
+    background:#0d0f14; border:1px solid var(--border); border-radius:8px;
+    padding:8px 10px; margin:6px 0; font-size:13px;
+  }
+  .link-item a{color:var(--accent); text-decoration:none;}
+  .link-row{display:flex; gap:8px; margin:6px 0;}
+  .link-row input{margin:0;}
+  .x{cursor:pointer; color:var(--red); padding:0 6px; font-weight:bold;}
+  #log{
+    background:#000; border:1px solid var(--border); border-radius:8px; padding:10px;
+    font-family:monospace; font-size:11px; max-height:220px; overflow-y:auto; white-space:pre-wrap;
+  }
+  .log2{color:var(--green);}
+  .nip05-badge{font-size:12px; white-space:nowrap;}
+  .nip05-badge.ok{color:var(--green);}
+  .nip05-badge.bad{color:var(--red);}
+  .nip05-badge.pending{color:var(--muted);}
+  .follow-item{
+    display:flex; align-items:center; gap:10px; background:#0d0f14; border:1px solid var(--border);
+    border-radius:8px; padding:8px 10px; margin:6px 0;
+  }
+  .follow-item .meta{flex:1; min-width:0;}
+  .follow-item .name{font-weight:600; font-size:13px;}
+  .pk{font-size:11px; color:var(--muted); word-break:break-all;}
+  code{background:#000; padding:1px 5px; border-radius:4px; font-size:11px;}
+</style>
+</head>
+<body>
+<div class="container">
 
+  <h1>🔗 Nostr LinkTree</h1>
+  <p class="muted">A minimal, relay-based link-in-bio app with verified NIP-05 badges. Runs entirely client-side.</p>
+
+  <!-- LOGIN -->
+  <div class="panel">
+    <h2>Identity</h2>
+    <div class="row">
+      <div class="btn" id="btnLoginExt">Login with Extension (NIP-07)</div>
+      <div class="btn secondary" id="btnLoginDemo">Use/Generate Demo Key</div>
+    </div>
+    <div class="muted" id="whoami">Not logged in.</div>
+  </div>
+
+  <!-- RELAYS -->
+  <div class="panel">
+    <h2>Relays</h2>
+    <textarea id="relayInput">wss://relay.damus.io
+wss://nos.lol
+wss://relay.nostr.band
+wss://nostr.wine</textarea>
+    <div class="muted">One relay URL per line.</div>
+  </div>
+
+  <!-- PROFILE EDITOR -->
+  <div class="panel">
+    <h2>Your Profile</h2>
+    <input id="nameInput" placeholder="Display name">
+    <input id="pictureInput" placeholder="Picture URL">
+    <input id="aboutInput" placeholder="About / bio">
+    <input id="lud16Input" placeholder="Lightning address (lud16), e.g. you@getalby.com">
+    <input id="nip05Input" placeholder="NIP-05 identifier, e.g. you@yourdomain.com">
+    <div class="row">
+      <div class="btn secondary" id="btnVerifyNip05">Verify NIP-05</div>
+      <span id="nip05Status" class="muted">Not checked</span>
+    </div>
+    <div class="row">
+      <div class="btn" id="btnPublishProfile">Publish Profile (kind:0)</div>
+    </div>
+  </div>
+
+  <!-- LINKS EDITOR -->
+  <div class="panel">
+    <h2>Your Links</h2>
+    <div id="linkRows"></div>
+    <div class="row">
+      <div class="btn secondary" id="btnAddLink">+ Add Link</div>
+      <div class="btn" id="btnPublishLinks">Publish Links (kind:30078)</div>
+    </div>
+  </div>
+
+  <!-- VIEW A PROFILE -->
+  <div class="panel">
+    <h2>View a Profile</h2>
+    <div class="row">
+      <input id="viewNpubInput" placeholder="npub1... (leave empty for your own)" style="flex:1;">
+      <div class="btn" id="btnViewProfile">Load</div>
+    </div>
+    <div id="publicProfileBox" class="muted">No profile loaded.</div>
+  </div>
+
+  <!-- FOLLOWING LIST WITH NIP-05 BADGES -->
+  <div class="panel">
+    <h2>Following (kind:3) — with NIP-05 badges</h2>
+    <div class="row">
+      <div class="btn secondary" id="btnLoadFollows">Load My Following List</div>
+      <div class="btn danger" id="btnClearNip05Cache">Clear NIP-05 Cache &amp; Re-verify</div>
+    </div>
+    <div id="followBox" class="muted">Not loaded.</div>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel">
+    <h2>Log</h2>
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<script type="module">
+import {
+  SimplePool,
+  generateSecretKey,
+  getPublicKey,
+  finalizeEvent,
+  nip19
+} from 'https://esm.sh/nostr-tools@2.7.2';
+
+/* ---------------------------------------------------------------- */
+/* Utilities                                                         */
+/* ---------------------------------------------------------------- */
+
+function bytesToHex(bytes){
+  return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function hexToBytes(hex){
+  const arr = new Uint8Array(hex.length/2);
+  for (let i=0;i<arr.length;i++) arr[i] = parseInt(hex.substr(i*2,2),16);
+  return arr;
+}
+
+function log(msg, cls){
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  const t = new Date().toLocaleTimeString();
+  line.textContent = `[${t}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function getRelays(){
+  return document.getElementById('relayInput').value
+    .split('\n').map(s=>s.trim()).filter(Boolean);
+}
+
+/* ---------------------------------------------------------------- */
+/* NIP-05 verification (spec-correct) + localStorage cache           */
+/* ---------------------------------------------------------------- */
+
+const NIP05_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+function nip05CacheKey(identifier, pubkeyHex){
+  return `nip05cache:${identifier}:${pubkeyHex}`;
+}
+
+function readNip05Cache(identifier, pubkeyHex){
+  try{
+    const raw = localStorage.getItem(nip05CacheKey(identifier, pubkeyHex));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.ts > NIP05_CACHE_TTL_MS) return null;
+    return parsed;
+  } catch(e){ return null; }
+}
+
+function writeNip05Cache(identifier, pubkeyHex, result){
+  try{
+    localStorage.setItem(
+      nip05CacheKey(identifier, pubkeyHex),
+      JSON.stringify({ ...result, ts: Date.now() })
+    );
+  } catch(e){ /* storage full / disabled — ignore */ }
+}
+
+function clearAllNip05Cache(){
+  const keys = [];
+  for (let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if (k && k.startsWith('nip05cache:')) keys.push(k);
+  }
+  keys.forEach(k => localStorage.removeItem(k));
+  log(`Cleared ${keys.length} cached NIP-05 result(s).`, 'log2');
+}
+
+/**
+ * Raw spec-correct verification: fetch /.well-known/nostr.json?name=<local>
+ * and confirm the returned pubkey matches. No redirects allowed.
+ */
+async function verifyNip05Raw(identifier, pubkeyHex){
+  if (!identifier || typeof identifier !== 'string'){
+    return { verified:false, reason:'Empty NIP-05 identifier' };
+  }
+  if (!identifier.includes('@')){
+    identifier = `_@${identifier}`;
+  }
+  const [localPart, domain] = identifier.split('@');
+  if (!localPart || !domain){
+    return { verified:false, reason:'Malformed NIP-05 identifier' };
+  }
+  if (!/^[a-zA-Z0-9-_.]+$/.test(localPart)){
+    return { verified:false, reason:'Invalid characters in local part' };
+  }
+
+  const url = `https://${domain}/.well-known/nostr.json?name=${encodeURIComponent(localPart)}`;
+  let json;
+  try{
+    const res = await fetch(url, { redirect: 'error' });
+    if (!res.ok) return { verified:false, reason:`HTTP ${res.status} fetching ${url}` };
+    json = await res.json();
+  } catch(e){
+    return { verified:false, reason:`Fetch failed: ${e.message}` };
+  }
+
+  if (!json || typeof json !== 'object' || !json.names){
+    return { verified:false, reason:'Response missing "names" map' };
+  }
+
+  const resolved = json.names[localPart];
+  if (!resolved){
+    return { verified:false, reason:`No entry for "${localPart}" in names map` };
+  }
+
+  if (resolved.toLowerCase() !== pubkeyHex.toLowerCase()){
+    return {
+      verified:false,
+      reason:`Pubkey mismatch: domain claims ${resolved.slice(0,8)}…, profile is ${pubkeyHex.slice(0,8)}…`
+    };
+  }
+
+  const relays = (json.relays && json.relays[pubkeyHex]) || [];
+  return { verified:true, relays };
+}
+
+/**
+ * Cached wrapper. Pass force:true to bypass and refresh the cache entry.
+ */
+async function verifyNip05Cached(identifier, pubkeyHex, { force=false } = {}){
+  if (!force){
+    const cached = readNip05Cache(identifier, pubkeyHex);
+    if (cached) return { ...cached, fromCache:true };
+  }
+  const result = await verifyNip05Raw(identifier, pubkeyHex);
+  writeNip05Cache(identifier, pubkeyHex, result);
+  return { ...result, fromCache:false };
+}
+
+/* ---------------------------------------------------------------- */
+/* Badge rendering helper — lazy-loads into any span by id           */
+/* ---------------------------------------------------------------- */
+
+function badgeId(pubkeyHex, salt=''){
+  return `nip05-badge-${pubkeyHex}${salt}`;
+}
+
+function badgePlaceholderHtml(pubkeyHex, salt=''){
+  return `<span id="${badgeId(pubkeyHex, salt)}" class="nip05-badge pending">⋯ checking NIP-05…</span>`;
+}
+
+async function hydrateBadge(pubkeyHex, nip05, salt='', force=false){
+  const el = document.getElementById(badgeId(pubkeyHex, salt));
+  if (!el) return;
+  if (!nip05){
+    el.textContent = '';
+    el.className = 'nip05-badge';
+    return;
+  }
+  const result = await verifyNip05Cached(nip05, pubkeyHex, { force });
+  if (result.verified){
+    el.textContent = `✓ ${nip05}`;
+    el.className = 'nip05-badge ok';
+    el.title = result.fromCache ? 'Verified (cached)' : 'Verified (live check)';
+  } else {
+    el.textContent = `⚠ ${nip05}`;
+    el.className = 'nip05-badge bad';
+    el.title = result.reason || 'Verification failed';
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Identity / signing                                                */
+/* ---------------------------------------------------------------- */
+
+let pubkey = null;      // hex
+let secretKey = null;   // Uint8Array, only set in demo-key mode
+let useExtension = false;
+
+async function signEvent(template){
+  if (useExtension && window.nostr){
+    return await window.nostr.signEvent(template);
+  }
+  if (!secretKey) throw new Error('No signing key available.');
+  return finalizeEvent(template, secretKey);
+}
+
+document.getElementById('btnLoginExt').onclick = async () => {
+  if (!window.nostr){
+    alert('No NIP-07 extension found (e.g. Alby, nos2x).');
+    return;
+  }
+  try{
+    pubkey = await window.nostr.getPublicKey();
+    useExtension = true;
+    setWhoAmI();
+    log('Logged in via NIP-07 extension.', 'log2');
+  } catch(e){
+    log('Extension login failed: ' + e.message);
+  }
+};
+
+document.getElementById('btnLoginDemo').onclick = () => {
+  let hex = localStorage.getItem('linktree_demo_sk');
+  if (!hex){
+    const sk = generateSecretKey();
+    hex = bytesToHex(sk);
+    localStorage.setItem('linktree_demo_sk', hex);
+    log('Generated new demo secret key (stored in localStorage).', 'log2');
+  }
+  secretKey = hexToBytes(hex);
+  pubkey = getPublicKey(secretKey);
+  useExtension = false;
+  setWhoAmI();
+  log('Logged in with demo key.', 'log2');
+};
+
+function setWhoAmI(){
+  const npub = nip19.npubEncode(pubkey);
+  document.getElementById('whoami').innerHTML =
+    `Logged in as <code>${npub}</code>`;
+}
+
+/* ---------------------------------------------------------------- */
+/* Relay pool                                                         */
+/* ---------------------------------------------------------------- */
+
+const pool = new SimplePool();
+
+/* ---------------------------------------------------------------- */
+/* NIP-05 manual verify button (profile editor)                      */
+/* ---------------------------------------------------------------- */
+
+document.getElementById('btnVerifyNip05').onclick = async () => {
+  if (!pubkey){ alert('Login first.'); return; }
+  const identifier = document.getElementById('nip05Input').value.trim();
+  const statusEl = document.getElementById('nip05Status');
+  statusEl.textContent = 'Checking...';
+  statusEl.style.color = '#888';
+
+  const result = await verifyNip05Cached(identifier, pubkey, { force:true });
+  if (result.verified){
+    statusEl.textContent = '✓ Verified — matches your pubkey';
+    statusEl.style.color = 'var(--green)';
+    log(`NIP-05 "${identifier}" verified successfully.`, 'log2');
+    if (result.relays?.length) log(`NIP-05 also advertises relays: ${result.relays.join(', ')}`, 'log2');
+  } else {
+    statusEl.textContent = '✗ Failed: ' + result.reason;
+    statusEl.style.color = 'var(--red)';
+    log(`NIP-05 verification failed: ${result.reason}`);
+  }
+};
+
+/* ---------------------------------------------------------------- */
+/* Profile publish                                                   */
+/* ---------------------------------------------------------------- */
+
+document.getElementById('btnPublishProfile').onclick = async () => {
+  if (!pubkey){ alert('Login first.'); return; }
+  const profile = {
+    name: document.getElementById('nameInput').value,
+    picture: document.getElementById('pictureInput').value,
+    about: document.getElementById('aboutInput').value,
+    lud16: document.getElementById('lud16Input').value,
+    nip05: document.getElementById('nip05Input').value.trim()
+  };
+  const template = {
+    kind: 0,
+    created_at: Math.floor(Date.now()/1000),
+    tags: [],
+    content: JSON.stringify(profile)
+  };
+  try{
+    const signed = await signEvent(template);
+    await Promise.any(pool.publish(getRelays(), signed));
+    log('Profile published (kind:0).', 'log2');
+  } catch(e){
+    log('Failed to publish profile: ' + e.message);
+  }
+};
+
+/* ---------------------------------------------------------------- */
+/* Links editor + publish (kind:30078 parameterized replaceable)     */
+/* ---------------------------------------------------------------- */
+
+let links = [];
+
+function renderLinkRows(){
+  const box = document.getElementById('linkRows');
+  box.innerHTML = links.map((l, i) => `
+    <div class="link-row">
+      <input data-i="${i}" data-f="title" value="${l.title.replace(/"/g,'&quot;')}" placeholder="Title">
+      <input data-i="${i}" data-f="url" value="${l.url.replace(/"/g,'&quot;')}" placeholder="URL">
+      <span class="x" data-del="${i}">✕</span>
+    </div>
+  `).join('');
+  box.querySelectorAll('input').forEach(inp => {
+    inp.oninput = () => {
+      links[+inp.dataset.i][inp.dataset.f] = inp.value;
+    };
+  });
+  box.querySelectorAll('[data-del]').forEach(x => {
+    x.onclick = () => { links.splice(+x.dataset.del,1); renderLinkRows(); };
+  });
+}
+
+document.getElementById('btnAddLink').onclick = () => {
+  links.push({ title:'', url:'' });
+  renderLinkRows();
+};
+renderLinkRows();
+
+document.getElementById('btnPublishLinks').onclick = async () => {
+  if (!pubkey){ alert('Login first.'); return; }
+  const template = {
+    kind: 30078,
+    created_at: Math.floor(Date.now()/1000),
+    tags: [['d', 'linktree-app']],
+    content: JSON.stringify(links.filter(l=>l.title && l.url))
+  };
+  try{
+    const signed = await signEvent(template);
+    await Promise.any(pool.publish(getRelays(), signed));
+    log('Links published (kind:30078).', 'log2');
+  } catch(e){
+    log('Failed to publish links: ' + e.message);
+  }
+};
+
+/* ---------------------------------------------------------------- */
+/* View a single profile, with NIP-05 badge                          */
+/* ---------------------------------------------------------------- */
+
+document.getElementById('btnViewProfile').onclick = async () => {
+  const relays = getRelays();
+  let target = document.getElementById('viewNpubInput').value.trim();
+  let pk;
+  try{
+    pk = target ? nip19.decode(target).data : pubkey;
+    if (!pk) throw new Error('no key');
+  } catch(e){
+    alert('Enter a valid npub, or login and leave blank for yourself.');
+    return;
+  }
+
+  const box = document.getElementById('publicProfileBox');
+  box.innerHTML = 'Loading...';
+
+  const ev = await pool.get(relays, { kinds:[0], authors:[pk] });
+  const linkEv = await pool.get(relays, { kinds:[30078], authors:[pk], '#d':['linktree-app'] });
+  const prof = ev ? JSON.parse(ev.content) : {};
+  const theirLinks = linkEv ? JSON.parse(linkEv.content) : [];
+
+  box.innerHTML = `
+    <div class="row">
+      <img class="avatar" src="${prof.picture||''}" onerror="this.style.display='none'">
+      <div>
+        <strong>${prof.name || '(no name)'}</strong>
+        ${prof.nip05 ? badgePlaceholderHtml(pk,'-view') : ''}
+        <div class="muted">${prof.about||''}</div>
+      </div>
+    </div>
+    ${theirLinks.map(l=>`<div class="link-item"><span>${l.title}</span><a href="${l.url}" target="_blank" rel="noopener">${l.url}</a></div>`).join('')
+      || '<div class="muted">No links published.</div>'}
+  `;
+
+  if (prof.nip05){
+    hydrateBadge(pk, prof.nip05, '-view');
+  }
+};
+
+/* ---------------------------------------------------------------- */
+/* Following list (kind:3) with NIP-05 badges per entry              */
+/* ---------------------------------------------------------------- */
+
+document.getElementById('btnLoadFollows').onclick = async () => {
+  if (!pubkey){ alert('Login first.'); return; }
+  const relays = getRelays();
+  const box = document.getElementById('followBox');
+  box.innerHTML = 'Loading contact list...';
+
+  const contactEv = await pool.get(relays, { kinds:[3], authors:[pubkey] });
+  if (!contactEv){
+    box.innerHTML = '<span class="muted">No kind:3 contact list found for this account.</span>';
+    return;
+  }
+
+  const followedPubkeys = contactEv.tags
+    .filter(t => t[0] === 'p' && t[1])
+    .map(t => t[1]);
+
+  if (followedPubkeys.length === 0){
+    box.innerHTML = '<span class="muted">Your contact list is empty.</span>';
+    return;
+  }
+
+  log(`Loading ${followedPubkeys.length} followed profile(s)...`);
+  box.innerHTML = '<span class="muted">Loading profiles...</span>';
+
+  // Fetch all kind:0 profiles for followed pubkeys in one filter
+  const events = await pool.querySync(relays, { kinds:[0], authors: followedPubkeys });
+
+  // Keep only the latest event per author
+  const latestByAuthor = {};
+  for (const ev of events){
+    if (!latestByAuthor[ev.pubkey] || ev.created_at > latestByAuthor[ev.pubkey].created_at){
+      latestByAuthor[ev.pubkey] = ev;
+    }
+  }
+
+  const rows = followedPubkeys.map(pk => {
+    const ev = latestByAuthor[pk];
+    let prof = {};
+    try{ prof = ev ? JSON.parse(ev.content) : {}; } catch(e){}
+    const npub = nip19.npubEncode(pk);
+    return `
+      <div class="follow-item">
+        <img class="avatar" src="${prof.picture||''}" onerror="this.style.display='none'">
+        <div class="meta">
+          <div class="name">
+            ${prof.name || '(no name)'}
+            ${prof.nip05 ? badgePlaceholderHtml(pk,'-follow') : '<span class="muted">no NIP-05 set</span>'}
+          </div>
+          <div class="pk">${npub}</div>
+        </div>
+      </div>
+    `;
+  });
+
+  box.innerHTML = rows.join('') || '<span class="muted">Nothing to show.</span>';
+
+  // Hydrate badges lazily, after DOM insertion
+  followedPubkeys.forEach(pk => {
+    const ev = latestByAuthor[pk];
+    let prof = {};
+    try{ prof = ev ? JSON.parse(ev.content) : {}; } catch(e){}
+    if (prof.nip05) hydrateBadge(pk, prof.nip05, '-follow');
+  });
+
+  log(`Rendered following list with ${followedPubkeys.length} entries.`, 'log2');
+};
+
+document.getElementById('btnClearNip05Cache').onclick = async () => {
+  clearAllNip05Cache();
+  // Re-trigger whichever view is loaded, forcing fresh checks
+  const followBox = document.getElementById('followBox');
+  if (followBox.querySelector('.follow-item')){
+    document.getElementById('btnLoadFollows').click();
+  }
+};
+
+log('App ready. Login to begin.', 'log2');
+</script>
+</body>
+</html>
